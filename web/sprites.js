@@ -103,7 +103,9 @@ const Sprites = (() => {
     return {
       head: isMain ? 'hair' : HEAD_KINDS[(t >>> 3) % HEAD_KINDS.length],
       colors: {
-        o: theme.outline,
+        // A rim, not an outline: lighter than the board so the figure separates from
+        // it. A near-black edge on a dark ground is what made these read as mud.
+        o: theme.rim,
         h: HAIRS[(t >>> 5) % HAIRS.length],
         s: SKINS[p % SKINS.length],
         e: theme.outline,

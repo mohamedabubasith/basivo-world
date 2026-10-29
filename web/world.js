@@ -59,6 +59,11 @@
       blockRight: v('--block-right'),
       fail: v('--fail'),
       tether: v('--tether'),
+      magenta: v('--magenta'),
+      rim: v('--rim'),
+      grid: v('--grid'),
+      trace: v('--trace'),
+      traceHot: v('--trace-hot'),
       mono: v('--mono'),
       label: v('--label'),
       labelMuted: v('--label-muted'),
@@ -271,6 +276,63 @@
     }
   }
 
+  // A trace that follows the board's own axes: along one grid axis, then the other.
+  // It never cuts a tile corner to corner, so it reads as routed wiring rather than
+  // a string pulled between two people, and it stops slicing through whoever stands
+  // between parent and child.
+  function route(child, parent) {
+    const corners = [
+      [child.x, child.y],
+      [parent.x, child.y],
+      [parent.x, parent.y],
+    ]
+    const out = []
+    for (const [gx, gy] of corners) {
+      const [px, py] = project(gx, gy)
+      const point = [Math.round(px + geometry.ox), Math.round(py + geometry.oy)]
+      const last = out[out.length - 1]
+      if (!last || last[0] !== point[0] || last[1] !== point[1]) out.push(point)
+    }
+    return out
+  }
+
+  const segLength = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1])
+
+  function pathLength(pts) {
+    let total = 0
+    for (let i = 1; i < pts.length; i += 1) total += segLength(pts[i - 1], pts[i])
+    return total
+  }
+
+  function pointAt(pts, d) {
+    for (let i = 1; i < pts.length; i += 1) {
+      const seg = segLength(pts[i - 1], pts[i])
+      if (d <= seg || i === pts.length - 1) {
+        const t = seg === 0 ? 0 : Math.max(0, Math.min(1, d / seg))
+        return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t]
+      }
+      d -= seg
+    }
+    return pts[pts.length - 1]
+  }
+
+  // A travelling dot with a short fading tail. Alpha-stepped pixels rather than a
+  // blur filter, so the trail stays crisp when the low-res canvas is scaled up.
+  function pulse(pts, color, head) {
+    const len = pathLength(pts)
+    if (len < 2) return
+    const TAIL = 9
+    lg.fillStyle = color
+    for (let i = 0; i < TAIL; i += 1) {
+      const d = head * len - i
+      if (d < 0 || d > len) continue
+      const [x, y] = pointAt(pts, d)
+      lg.globalAlpha = (1 - i / TAIL) ** 2
+      lg.fillRect(Math.round(x), Math.round(y), 1, 1)
+    }
+    lg.globalAlpha = 1
+  }
+
   function fit() {
     const dpr = window.devicePixelRatio || 1
     const cssW = canvas.clientWidth
@@ -329,6 +391,15 @@
         lg.fillRect(cx - half, cy - TH / 2 + r, half * 2, 1)
       }
     }
+    // The lattice: each tile's two upper edges, so the board reads as a lit grid
+    // rather than a checkerboard. Drawn after every fill so no tile paints over it.
+    for (const [x, y] of ground) {
+      const [px, py] = project(x, y)
+      const cx = px + geometry.ox
+      const cy = py + geometry.oy
+      line(cx - TW / 2, cy, cx, cy - TH / 2, theme.grid, false)
+      line(cx, cy - TH / 2, cx + TW / 2, cy, theme.grid, false)
+    }
     // Faces only where the island ends, so it reads as a floating slab.
     for (const [x, y] of ground) {
       const [px, py] = project(x, y)
@@ -378,13 +449,22 @@
       return [Math.round(px + geometry.ox), Math.round(py + geometry.oy - drop * drop * 48)]
     }
 
-    // Tethers on the ground, under everyone: who spawned whom.
+    // Traces on the ground, under everyone: who spawned whom. While the child is
+    // still working, current runs down the trace from parent to child, so the
+    // direction of the delegation is visible and not just the fact of it.
     for (const a of actors.values()) {
       const p = a.agent.parentId && !a.agent.isOrphan ? actors.get(a.agent.parentId) : null
       if (!p) continue
-      const [x0, y0] = foot(a)
-      const [x1, y1] = foot(p)
-      line(x0, y0, x1, y1, isActive(a.agent) ? theme.violet : theme.tether, a.agent.isBackground)
+      const pts = route(a, p)
+      const live = isActive(a.agent)
+      for (let i = 1; i < pts.length; i += 1) {
+        line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], live ? theme.trace : theme.tether, a.agent.isBackground)
+      }
+      if (!live) continue
+      // Reversed so the pulse runs parent to child; the phase staggers the links so
+      // they do not all fire on the same beat.
+      const downstream = [...pts].reverse()
+      pulse(downstream, a.agent.isBackground ? theme.magenta : theme.traceHot, (now / 1400 + a.phase) % 1)
     }
 
     const order = [...actors.values()].sort((m, n) => m.x + m.y - (n.x + n.y))
@@ -393,10 +473,19 @@
       const agent = a.agent
       const [fx, fy] = foot(a)
       const isStalled = agent.shown === 'running' && wall - agent.lastAt > STALL_MS
-      // Shadow.
-      lg.fillStyle = theme.tether
-      lg.globalAlpha = 0.35
-      lg.fillRect(fx - 4, fy - 1, 9, 2)
+      // A lit pad under whoever is working, so the eye finds the live agents first;
+      // everyone else keeps a plain shadow.
+      if (isActive(agent)) {
+        lg.fillStyle = agent.shown === 'waiting' ? theme.magenta : theme.traceHot
+        lg.globalAlpha = 0.22
+        lg.fillRect(fx - 6, fy - 2, 13, 4)
+        lg.globalAlpha = 0.4
+        lg.fillRect(fx - 4, fy - 1, 9, 2)
+      } else {
+        lg.fillStyle = theme.tether
+        lg.globalAlpha = 0.35
+        lg.fillRect(fx - 4, fy - 1, 9, 2)
+      }
       lg.fillRect(fx - 3, fy + 1, 7, 1)
       lg.globalAlpha = 1
       // The stack: one block per order of magnitude of cost-weighted tokens.

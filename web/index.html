@@ -9,52 +9,69 @@
   :root {
     --mono: ui-monospace, "Geist Mono", "SF Mono", Menlo, Consolas, monospace;
     --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-    --violet: #6d4aff;
-    --violet-soft: #b9a8ff;
-    --fail: #d4544a;
-    /* Ink, the default: the world at night. */
-    --bg: #0e0d12;
-    --text: #f1ece3;
-    --muted: #a9a39a;
-    --line: #2a2733;
-    --panel: #17151d;
-    --outline: #0e0d12;
-    --trousers: #2a2733;
-    --bubble: #f4efe6;
-    --tile-a: #f4efe6;
-    --tile-b: #eee8dd;
-    --slab: #a9a39a;
-    --slab-dark: #5f5a52;
-    --block-top: #ebe4d7;
-    --block-left: #d9d0c0;
-    --block-right: #a9a39a;
-    --tether: #5f5a52;
-    /* The ground is paper in both themes, so its labels are ink in both. */
-    --label: #15131a;
-    --label-muted: #5f5a52;
-    --chip: rgba(244, 239, 230, 0.92);
+    /* Grid: the board is a lit circuit, the accent is the current running through it. */
+    --violet: #22d3ee;
+    --violet-soft: #7ff3ff;
+    --magenta: #e879f9;
+    --fail: #ff4d6d;
+    --bg: #070b14;
+    --text: #dbe7f5;
+    --muted: #5f7490;
+    --line: #16202e;
+    --panel: #0b1220;
+    /* Sprite rim: near the background, so figures separate without a black cage. */
+    --outline: #050a14;
+    --rim: #3d5a7d;
+    --trousers: #1b2740;
+    --bubble: #0e1a2b;
+    --tile-a: #0c1424;
+    --tile-b: #0a1120;
+    --grid: #13263e;
+    --slab: #11203a;
+    --slab-dark: #060c16;
+    --block-top: #1b3a5c;
+    --block-left: #122844;
+    --block-right: #0a1526;
+    /* Traces: cool and dim at rest, the accent when current flows. */
+    --tether: #1b3550;
+    --trace: #1a3c5a;
+    --trace-hot: #22d3ee;
+    /* The ground is lit glass now, so its labels are light in both themes. */
+    --label: #cfe3f7;
+    --label-muted: #6b84a3;
+    --chip: rgba(7, 11, 20, 0.92);
     color-scheme: dark;
   }
   @media (prefers-color-scheme: light) {
     :root {
-      /* Paper: the world by day. */
-      --bg: #f4efe6;
-      --text: #15131a;
-      --muted: #5f5a52;
-      --line: #d9d0c0;
-      --panel: #ebe4d7;
-      --outline: #15131a;
-      --trousers: #2a2733;
+      /* Daylight: the same board, lit from above instead of from within. */
+      --violet: #0e7490;
+      --violet-soft: #22d3ee;
+      --magenta: #a21caf;
+      --fail: #be123c;
+      --bg: #dde7f0;
+      --text: #0f1b2a;
+      --muted: #4a6075;
+      --line: #b6c6d6;
+      --panel: #cbd9e6;
+      --outline: #27394d;
+      --rim: #ffffff;
+      --trousers: #3c4a60;
       --bubble: #ffffff;
       /* The board is a shade darker than the page, so it reads as an object on it. */
-      --tile-a: #e9e2d4;
-      --tile-b: #e4dccd;
-      --slab: #c9bfad;
-      --slab-dark: #a39887;
-      --block-top: #f4efe6;
-      --block-left: #d9d0c0;
-      --block-right: #a9a39a;
-      --tether: #a9a39a;
+      --tile-a: #c3d3e2;
+      --tile-b: #bccdde;
+      --grid: #a5bacd;
+      --slab: #9bb0c4;
+      --slab-dark: #7c93a9;
+      --block-top: #e2ecf5;
+      --block-left: #b6c6d6;
+      --block-right: #90a6ba;
+      --tether: #8ba2b8;
+      --trace: #7f9cb5;
+      --trace-hot: #0e7490;
+      --label: #0f1b2a;
+      --label-muted: #4a6075;
       --chip: rgba(255, 255, 255, 0.94);
       color-scheme: light;
     }
