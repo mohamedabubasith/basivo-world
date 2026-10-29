@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>basivo world</title>
+<meta name="description" content="Your Claude Code session's agents, live: who spawned whom, what each is doing, and what it costs.">
+<style>
+  :root {
+    --mono: ui-monospace, "Geist Mono", "SF Mono", Menlo, Consolas, monospace;
+    --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --violet: #6d4aff;
+    --violet-soft: #b9a8ff;
+    --fail: #d4544a;
+    /* Ink, the default: the world at night. */
+    --bg: #0e0d12;
+    --text: #f1ece3;
+    --muted: #a9a39a;
+    --line: #2a2733;
+    --panel: #17151d;
+    --outline: #0e0d12;
+    --trousers: #2a2733;
+    --bubble: #f4efe6;
+    --tile-a: #f4efe6;
+    --tile-b: #eee8dd;
+    --slab: #a9a39a;
+    --slab-dark: #5f5a52;
+    --block-top: #ebe4d7;
+    --block-left: #d9d0c0;
+    --block-right: #a9a39a;
+    --tether: #5f5a52;
+    /* The ground is paper in both themes, so its labels are ink in both. */
+    --label: #15131a;
+    --label-muted: #5f5a52;
+    --chip: rgba(244, 239, 230, 0.92);
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      /* Paper: the world by day. */
+      --bg: #f4efe6;
+      --text: #15131a;
+      --muted: #5f5a52;
+      --line: #d9d0c0;
+      --panel: #ebe4d7;
+      --outline: #15131a;
+      --trousers: #2a2733;
+      --bubble: #ffffff;
+      /* The board is a shade darker than the page, so it reads as an object on it. */
+      --tile-a: #e9e2d4;
+      --tile-b: #e4dccd;
+      --slab: #c9bfad;
+      --slab-dark: #a39887;
+      --block-top: #f4efe6;
+      --block-left: #d9d0c0;
+      --block-right: #a9a39a;
+      --tether: #a9a39a;
+      --chip: rgba(255, 255, 255, 0.94);
+      color-scheme: light;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); }
+  body { font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  #world { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: manipulation; }
+
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 2;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 20px;
+    padding: 18px 24px 14px; pointer-events: none;
+  }
+  .brand { font-weight: 300; font-size: 22px; letter-spacing: -0.02em; margin: 0; white-space: nowrap; }
+  /* The wordmark's i is dotted with a violet square, as on basivo.in. */
+  .brand .i { position: relative; }
+  .brand .i::after {
+    content: ""; position: absolute; left: 50%; top: 0.12em; width: 0.2em; height: 0.2em;
+    transform: translateX(-50%); background: var(--violet);
+  }
+  #stats { font-family: var(--mono); font-size: 12px; color: var(--muted); flex: 1 1 auto; min-width: 0; }
+  #status {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--muted); white-space: nowrap;
+  }
+  #status::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 8px; background: var(--muted); vertical-align: 1px; }
+  #status[data-mode="live"]::before { background: var(--violet); animation: beat 1.6s steps(2, jump-none) infinite; }
+  #status[data-mode="demo"] { color: var(--violet-soft); }
+  #status[data-mode="demo"]::before { background: var(--violet-soft); }
+  #status[data-mode="lost"]::before { background: var(--fail); }
+  @media (prefers-color-scheme: light) {
+    /* The soft violet is for ink; on paper it needs the full one to be read. */
+    #status[data-mode="demo"] { color: var(--violet); }
+    #status[data-mode="demo"]::before { background: var(--violet); }
+  }
+  @keyframes beat { 50% { opacity: 0.25; } }
+
+  #empty {
+    position: fixed; left: 0; right: 0; bottom: 92px; z-index: 1; text-align: center;
+    font-family: var(--mono); font-size: 12px; color: var(--muted); padding: 0 24px; pointer-events: none;
+  }
+  #legend {
+    position: fixed; left: 24px; right: 24px; bottom: 18px; z-index: 2;
+    display: flex; flex-wrap: wrap; gap: 4px 18px; pointer-events: none;
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+  #legend b { font-weight: 500; color: var(--text); }
+  #legend .k { display: inline-block; width: 8px; height: 8px; margin-right: 6px; vertical-align: 0; }
+  #legend .violet { background: var(--violet); }
+  #legend .ink { background: var(--tether); }
+  #legend .dash { background: repeating-linear-gradient(90deg, var(--tether) 0 3px, transparent 3px 6px); width: 14px; height: 2px; vertical-align: 3px; }
+
+  #tip {
+    position: fixed; z-index: 3; min-width: 220px; max-width: min(320px, calc(100vw - 16px));
+    padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.55; color: var(--muted); pointer-events: none;
+  }
+  #tip .tip-title { font-family: var(--sans); font-size: 15px; font-weight: 500; color: var(--text); }
+  #tip .tip-label { color: var(--text); margin-bottom: 6px; overflow-wrap: anywhere; }
+  #tip .tip-row { display: flex; justify-content: space-between; gap: 16px; }
+  #tip .tip-row span:last-child { color: var(--text); text-align: right; overflow-wrap: anywhere; }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 560px) {
+    #hud { padding: 14px 16px 10px; gap: 4px 12px; }
+    .brand { font-size: 19px; }
+    #stats { order: 3; flex-basis: 100%; font-size: 11px; }
+    #legend { left: 16px; right: 16px; bottom: 12px; gap: 2px 12px; font-size: 10px; }
+    #legend .wide { display: none; }
+    #empty { bottom: 78px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #status[data-mode="live"]::before { animation: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="world" aria-hidden="true"></canvas>
+
+<header id="hud">
+  <h1 class="brand">bas<span class="i">ı</span>vo world</h1>
+  <div id="stats">—</div>
+  <div id="status" role="status">Starting</div>
+</header>
+
+<p id="empty" hidden>No helpers yet. They appear here when Claude delegates.</p>
+
+<footer id="legend" aria-hidden="true">
+  <span><b>blocks</b> = cost, one per ×10 tokens</span>
+  <span><b>sitting</b> = waiting on a helper</span>
+  <span class="wide"><span class="k violet"></span>working</span>
+  <span class="wide"><span class="k dash"></span>background helper</span>
+  <span class="wide">hover or tap anyone for detail</span>
+</footer>
+
+<div id="tip" role="tooltip" hidden></div>
+<div id="summary" class="sr" aria-live="polite"></div>
+
+<script src="sprites.js"></script>
+<script src="demo.js"></script>
+<script src="world.js"></script>
+</body>
+</html>

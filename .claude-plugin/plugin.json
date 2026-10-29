@@ -1,0 +1,12 @@
+{
+  "name": "basivo-world",
+  "displayName": "Basivo World",
+  "version": "0.1.0",
+  "description": "See your Claude Code agents live: who spawned whom, at any depth, what each is doing and what it costs — in a pane, and as a pixel-art world in your browser.",
+  "author": { "name": "Mohamed Abu Basith", "url": "https://basivo.in" },
+  "homepage": "https://github.com/mohamedabubasith/basivo-world",
+  "repository": "https://github.com/mohamedabubasith/basivo-world",
+  "license": "MIT",
+  "keywords": ["agents", "subagents", "visualization", "observability", "pixel-art", "mod"],
+  "types": "./types/index.d.ts"
+}
