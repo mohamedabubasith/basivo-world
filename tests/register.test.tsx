@@ -99,10 +99,10 @@ test('a nested helper shows in the pane under its parent, on every surface', asy
 
   for (const surface of SURFACES) {
     const lines = await rows($, surface)
-    expect(lines.some(l => /^└─ ◐ reviewer {2}waiting on a helper/.test(l))).toBe(true)
-    expect(lines.some(l => /^ {3}└─ ● pinger/.test(l))).toBe(true)
-    expect(lines[0]).toContain('2 helpers')
-    expect(lines[0]).toContain('depth 2')
+    expect(lines.some(l => /^└─ ◐ r1 {2}waiting on a helper/.test(l))).toBe(true)
+    expect(lines.some(l => /^ {3}└─ ● p1/.test(l))).toBe(true)
+    expect(lines[2]).toContain('2 helpers')
+    expect(lines[2]).toContain('depth 2')
   }
 })
 
@@ -114,7 +114,7 @@ test('tokens are charged to the helper whose request spent them', async ($, on) 
   await step($, 'a1')
   // 2 requests × (1000 in + 200 out × 5 + 5000 cache read × 0.1) = 2 × 2500
   const lines = await rows($, 'desktop')
-  expect(lines.some(l => /● Explore .* 5\.0k$/.test(l))).toBe(true)
+  expect(lines[lines.findIndex(l => /● a1 /.test(l)) + 1]).toBe('5.0k')
 })
 
 test('usage from a loop no roster names is counted, never drawn', async ($, on) => {
@@ -123,7 +123,7 @@ test('usage from a loop no roster names is counted, never drawn', async ($, on) 
   await step($, 'compaction-fork')
   const lines = await rows($, 'desktop')
   expect(lines.some(l => l.includes('compaction-fork'))).toBe(false)
-  expect(lines[0]).toContain('0 helpers')
+  expect(lines[2]).toContain('0 helpers')
 })
 
 test('a helper the spawn hook never saw is recovered from the roster', async ($, on) => {
@@ -131,8 +131,8 @@ test('a helper the spawn hook never saw is recovered from the roster', async ($,
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.tool.call({ tool: 'Read', file_path: '/x', agentId: 'e1' })
   const lines = await rows($, 'desktop')
-  // Recovered with its type and place in the tree; the Read has finished, so it is thinking.
-  expect(lines.some(l => /^└─ ● Explore {2}thinking/.test(l))).toBe(true)
+  // Recovered with its description as its name, and place in the tree; the Read has finished, so it is thinking.
+  expect(lines.some(l => /^└─ ● look around {2}thinking/.test(l))).toBe(true)
 })
 
 test('a finished helper is done, and the parent stops waiting', async ($, on) => {
@@ -140,11 +140,11 @@ test('a finished helper is done, and the parent stops waiting', async ($, on) =>
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.turn.start({ text: 'go', turnId: 'm' })
   await $.agent.spawn(spawn('r1', 'reviewer'))
-  expect((await rows($, 'desktop'))[1]).toContain('◐ main')
+  expect((await rows($, 'desktop'))[3]).toContain('◐ main')
   await $.turn.complete({ answer: 'ok', durationMs: 5, isAborted: false, turnId: 'r', agentId: 'r1', reason: 'answer' })
   const lines = await rows($, 'desktop')
-  expect(lines.some(l => /✓ reviewer {2}done/.test(l))).toBe(true)
-  expect(lines[1]).toContain('● main')
+  expect(lines.some(l => /✓ r1 {2}done/.test(l))).toBe(true)
+  expect(lines[3]).toContain('● main')
 })
 
 test('the pane says so plainly when nothing has been delegated', async ($, on) => {
@@ -152,6 +152,17 @@ test('the pane says so plainly when nothing has been delegated', async ($, on) =
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   const lines = await rows($, 'desktop')
   expect(lines.some(l => l.startsWith('No helpers yet'))).toBe(true)
+})
+
+test('the pane button opens the browser view, as /world does', async ($, on) => {
+  const { writes } = engine(on)
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    await ui.press({ key: 'open-world' })
+    await ui.unmount()
+  }
+  expect(writes.has('/home/t/.claude/basivo-world/sess-1/index.html')).toBe(true)
 })
 
 test('/world publishes the browser view, and state.js follows the world', async ($, on) => {

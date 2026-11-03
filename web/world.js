@@ -145,7 +145,7 @@
     children.set('main', [...(children.get('main') ?? []), ...roots])
 
     const maxBlocks = Math.max(0, ...agents.map(a => blocksFor(a.weight)))
-    const longest = Math.max(4, ...agents.map(a => Math.min(16, a.type.length)))
+    const longest = Math.max(4, ...agents.map(a => Math.min(16, (a.label || a.type).length)))
     // A monospace label is about 0.6em a character, at 11 CSS px, in art pixels at K.
     const labelW = (longest * 0.6 * 11) / K
     const colGap = Math.max(22, Math.ceil(labelW) + 8)
@@ -572,7 +572,9 @@
       const a = h.actor.agent
       const x = (h.fx + 0.5) * S
       const y = (h.fy + 4) * S
-      const name = a.type.length > 16 ? `${a.type.slice(0, 15)}…` : a.type
+      const full = a.label || a.type
+      // Capped so the tree fits a phone; the tooltip carries the whole name.
+      const name = full.length > 16 ? `${full.slice(0, 15)}…` : full
       const detail = `${fmt(a.weight)}${a.isBackground ? ' · bg' : ''}${a.isOrphan ? ' · ?' : ''}`
       g.font = `500 ${size}px ${theme.mono}`
       const w1 = g.measureText(name).width
@@ -622,7 +624,7 @@
     hud.empty.hidden = helpers > 0
     const said = view.agents
       .filter(a => a.id !== 'main')
-      .map(a => `${a.type} ${a.shown === 'running' ? `running ${a.tool ?? ''}`.trim() : a.shown}`)
+      .map(a => `${a.label || a.type} ${a.shown === 'running' ? `running ${a.tool ?? ''}`.trim() : a.shown}`)
       .join('. ')
     const sentence = helpers === 0 ? 'No helpers yet.' : `${parts.join(', ')}. ${said}.`
     if (hud.summary.textContent !== sentence) hud.summary.textContent = sentence
@@ -652,15 +654,15 @@
     const wall = Date.now()
     const isStalled = a.shown === 'running' && wall - a.lastAt > STALL_MS
     const rows = [
+      ['', a.label || a.type],
       ['', a.type],
-      ['', a.label],
       [
         'state',
         `${a.shown}${isStalled ? ` · quiet ${ago(wall - a.lastAt)}` : ''}${a.shown === 'waiting' ? ' on a helper' : ''}${a.isBackground ? ' · background' : ''}`,
       ],
       ['doing', a.shown === 'running' ? (a.tool ?? 'thinking') : '—'],
       ['model', a.model ?? '—'],
-      ['spawned by', a.isOrphan ? 'not seen' : parent ? parent.type : '—'],
+      ['spawned by', a.isOrphan ? 'not seen' : parent ? parent.label || parent.type :'—'],
       ['tools', String(a.toolCalls)],
       ['tokens', `${fmt(a.tokens.input)} in · ${fmt(a.tokens.output)} out`],
       ['cache', `${fmt(a.tokens.cacheRead)} read · ${fmt(a.tokens.cacheWrite)} written`],

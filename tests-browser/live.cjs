@@ -48,7 +48,9 @@ async function until(page, fn, ms = 3000) {
   await page.waitForTimeout(700)
   await page.screenshot({ path: `${SHOTS}/live-rich.png` })
 
-  // The stalled researcher, judged by the page's own clock.
+  // The stalled researcher, judged by the page's own clock. Boxes are read again
+  // here: the crew walks to its places, so the ones from the live check are stale.
+  s = await inspect(page)
   const box = s.boxes.find(b => b.id === 'slw')
   await page.mouse.move(box.x + box.w / 2, box.y + box.h / 2)
   await page.waitForTimeout(200)

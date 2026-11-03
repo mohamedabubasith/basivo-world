@@ -51,7 +51,7 @@ async function at(page, ms) {
   await page.clock.runFor(100)
   const tip = await page.locator('#tip').innerText()
   check(await page.locator('#tip').isVisible(), 'tooltip appears on hover')
-  check(/tester/.test(tip) && /write the missing tests/.test(tip) && /spawned by\s*reviewer/.test(tip), 'tooltip names the agent, its task and its spawner')
+  check(/tester/.test(tip) && /write the missing tests/.test(tip) && /spawned by\s*review the change for issue #42/.test(tip), 'tooltip names the agent, its task and its spawner')
   await page.screenshot({ path: `${SHOTS}/demo-1440-dark-hover.png` })
   await page.mouse.move(5, 5)
 

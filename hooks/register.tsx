@@ -21,7 +21,8 @@ const GLYPH: Record<Status, string> = {
   failed: '✗',
   stopped: '■',
 }
-const COLOR: Partial<Record<Status, string>> = { running: '#8b6dff', waiting: 'yellow', failed: 'red' }
+const ACCENT = '#8b6dff'
+const COLOR: Partial<Record<Status, string>> = { running: ACCENT, waiting: 'yellow', done: 'green', failed: 'red' }
 
 function doing(a: W.ViewAgent): string {
   if (a.isStalled) return `quiet ${W.STALL_MS / 1000}s+`
@@ -37,19 +38,20 @@ function row(a: W.ViewAgent): string {
     .join('')
   const branch = a.depth === 0 ? '' : a.isLast ? '└─ ' : '├─ '
   const orphan = a.isOrphan ? ' (parent unseen)' : ''
-  return `${rails}${branch}${GLYPH[a.shown]} ${a.type}${orphan}  ${doing(a)}  ${W.fmtTokens(a.weight)}`
+  return `${rails}${branch}${GLYPH[a.shown]} ${a.label || a.type}${orphan}  ${doing(a)}`
 }
 
 function summary(v: W.View): string {
   const helpers = v.counts.all - 1
   const parts = [
     `${helpers} helper${helpers === 1 ? '' : 's'}`,
-    `${v.counts.running} running`,
-    `${v.counts.waiting} waiting`,
+    `${GLYPH.running} ${v.counts.running} running`,
+    `${GLYPH.waiting} ${v.counts.waiting} waiting`,
   ]
+  if (v.counts.done > 0) parts.push(`${GLYPH.done} ${v.counts.done} done`)
+  if (v.counts.failed > 0) parts.push(`${GLYPH.failed} ${v.counts.failed} failed`)
   if (v.counts.maxDepth > 1) parts.push(`depth ${v.counts.maxDepth}`)
-  parts.push(`≈${W.fmtTokens(v.totals.weighted)} weighted tokens`)
-  return parts.join(' · ')
+  return parts.join('  ·  ')
 }
 
 function fileUrl(dir: string): string {
@@ -81,10 +83,14 @@ function schedule($: EngineInterface): void {
   })
 }
 
+// Bookkeeping never fails the event it rides on: a lost update costs one frame of the
+// view, while a throw here would cost the person a tool result or a finished turn.
 async function change($: EngineInterface, fn: (w: World, at: number) => World): Promise<void> {
-  const at = await $.clock.now()
-  await update($, world, w => fn(w, at))
-  schedule($)
+  try {
+    const at = await $.clock.now()
+    await update($, world, w => fn(w, at))
+    schedule($)
+  } catch {}
 }
 
 // The engine's roster settles what events missed: an agent spawned before a reload,
@@ -108,9 +114,11 @@ async function sync($: EngineInterface): Promise<void> {
 // loop is looked up in the roster before an event lands on it.
 async function ensure($: EngineInterface, agentId: string | undefined): Promise<void> {
   if (agentId === undefined || forks.has(agentId)) return
-  if ((await read($, world)).agents[agentId]) return
-  await sync($)
-  if (!(await read($, world)).agents[agentId]) forks.add(agentId)
+  try {
+    if ((await read($, world)).agents[agentId]) return
+    await sync($)
+    if (!(await read($, world)).agents[agentId]) forks.add(agentId)
+  } catch {}
 }
 
 async function publishWeb($: EngineInterface): Promise<string | null> {
@@ -135,6 +143,14 @@ async function openInBrowser($: EngineInterface, url: string): Promise<boolean> 
     }
   }
   return false
+}
+
+// /world and the pane's button both land here; the answer says where the view is.
+async function openWorld($: EngineInterface): Promise<string> {
+  const dir = await publishWeb($)
+  if (!dir) return 'The browser view needs a home folder to write to, and none was found.'
+  const url = fileUrl(dir)
+  return (await openInBrowser($, url)) ? `World opened in your browser: ${url}` : `Open the world in your browser: ${url}`
 }
 
 export const register: Register = on => {
@@ -222,39 +238,52 @@ export const register: Register = on => {
   on('command.run', { command: 'world' }, async $ => {
     await update($, isPaneOpened, () => true)
     await $.ui.open({ id: PANE, title: 'World' })
-    const dir = await publishWeb($)
-    if (!dir) {
-      return { text: 'The world pane is open. The browser view needs a home folder to write to, and none was found.' }
-    }
-    const url = fileUrl(dir)
-    const isOpened = await openInBrowser($, url)
-    return { text: isOpened ? `World opened in your browser: ${url}` : `Open the world in your browser: ${url}` }
+    return { text: await openWorld($) }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
+    const { Box, Text, Button } = $.ui.resolve(e)
     const v = W.view(await read($, world), await $.clock.now())
-    const room = Math.max(3, (e.viewport?.rows ?? 24) - 4)
+    const room = Math.max(3, (e.viewport?.rows ?? 24) - 8)
     const helpers = v.counts.all - 1
     const dir = await read($, browserDir)
 
     return (
-      <Box flexDirection="column">
-        <Text dimColor>{summary(v)}</Text>
-        {v.agents.slice(0, room).map(a => (
-          <Text
-            color={COLOR[a.shown]}
-            dimColor={a.shown === 'done' || a.shown === 'stopped'}
-            wrap="truncate-end"
-          >
-            {row(a)}
+      <Box flexDirection="column" gap={1}>
+        <Box justifyContent="space-between">
+          <Text bold color={ACCENT}>
+            ◆ basivo world
           </Text>
-        ))}
-        {v.agents.length > room && <Text dimColor>… {v.agents.length - room} more</Text>}
-        {helpers === 0 && <Text dimColor>No helpers yet. They appear here when Claude delegates.</Text>}
-        <Text dimColor>
-          {dir ? 'Also live in your browser. /world reopens it.' : '/world opens the pixel-art view in your browser.'}
-        </Text>
+          <Text dimColor>≈{W.fmtTokens(v.totals.weighted)} tokens</Text>
+        </Box>
+        <Text wrap="truncate-end">{summary(v)}</Text>
+        <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
+          {v.agents.slice(0, room).map(a => (
+            <Box key={a.id} justifyContent="space-between" gap={2}>
+              <Text
+                color={COLOR[a.shown]}
+                dimColor={a.shown === 'done' || a.shown === 'stopped'}
+                bold={a.depth === 0}
+                wrap="truncate-end"
+              >
+                {row(a)}
+              </Text>
+              <Text dimColor>{W.fmtTokens(a.weight)}</Text>
+            </Box>
+          ))}
+          {v.agents.length > room && <Text dimColor>… {v.agents.length - room} more</Text>}
+          {helpers === 0 && <Text dimColor>No helpers yet. They appear here when Claude delegates.</Text>}
+        </Box>
+        <Box gap={2} alignItems="center">
+          <Button
+            key="open-world"
+            variant="primary"
+            hotkey="w"
+            label={dir ? 'Reopen world view' : 'Open world view'}
+            onPress={async () => $.ui.toast(await openWorld($))}
+          />
+          <Text dimColor>pixel-art view in your browser · or /world</Text>
+        </Box>
       </Box>
     )
   })
