@@ -8,7 +8,7 @@ const os = require('os')
 const path = require('path')
 const ROOT = path.resolve(__dirname, '..')
 const D = fs.mkdtempSync(path.join(os.tmpdir(), 'basivo-world-session-'))
-for (const f of ['index.html', 'world.js', 'sprites.js', 'demo.js']) fs.copyFileSync(path.join(ROOT, 'web', f), path.join(D, f))
+for (const f of ['index.html', 'world.js', 'demo.js', 'three.min.js']) fs.copyFileSync(path.join(ROOT, 'web', f), path.join(D, f))
 const STATE = `${D}/state.js`
 const SHOTS = process.argv[2] || D
 const GEN = path.join(__dirname, 'gen-state.ts')
@@ -59,7 +59,7 @@ async function until(page, fn, ms = 3000) {
   const orphan = s.boxes.find(b => b.id === 'orf')
   await page.mouse.move(orphan.x + orphan.w / 2, orphan.y + orphan.h / 2)
   await page.waitForTimeout(200)
-  check(/spawned by\s*not seen/.test(await page.locator('#tip').innerText()), 'the orphan says its spawner was not seen, rather than guessing one')
+  check(/reports to\s*not seen/.test(await page.locator('#tip').innerText()), 'the orphan says its spawner was not seen, rather than guessing one')
   await page.mouse.move(5, 5)
 
   // 3. A live update: a new helper is spawned, the page picks it up from the rewrite.

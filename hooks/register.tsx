@@ -5,7 +5,7 @@ import type { Status, World } from '../types'
 import * as W from './world'
 
 const PANE = 'basivo-world'
-const WEB_FILES = ['index.html', 'world.js', 'sprites.js', 'demo.js'] as const
+const WEB_FILES = ['index.html', 'world.js', 'demo.js', 'three.min.js'] as const
 
 // Change the tag when World's fields change: it declines what an earlier version
 // stored, which outlives a reload.
@@ -157,7 +157,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'world',
-      description: 'Show the live agent world: a pane here, and the pixel-art view in your browser',
+      description: 'Show the live agent world: a pane here, and the 3D office in your browser',
     })
     const at = await $.clock.now()
     await update($, world, w => (w.startedAt === 0 ? W.emptyWorld(at) : w))
@@ -282,7 +282,7 @@ export const register: Register = on => {
             label={dir ? 'Reopen world view' : 'Open world view'}
             onPress={async () => $.ui.toast(await openWorld($))}
           />
-          <Text dimColor>pixel-art view in your browser · or /world</Text>
+          <Text dimColor>3D office in your browser · or /world</Text>
         </Box>
       </Box>
     )

@@ -33,8 +33,13 @@ async function at(page, ms) {
 
   // 1. Desktop, dark, at 5.5s: the deepest moment of the loop.
   let { ctx, page, errors } = await open(browser, { width: 1440, height: 900, scheme: 'dark' })
-  await at(page, 5500)
+  // 0. The tester is spawned at 2.4s: it takes its brief at the reviewer's desk first.
+  await at(page, 2600)
   let s = await inspect(page)
+  check(s.trips.some(t => t.id === 't1' && t.kind === 'brief' && t.to === 'r1'), `the tester is briefed at the reviewer's desk ${JSON.stringify(s.trips)}`)
+  await page.screenshot({ path: `${SHOTS}/demo-1440-dark-brief.png` })
+  await at(page, 5500)
+  s = await inspect(page)
   check(s.mode === 'demo', `mode is demo (${s.mode})`)
   check(s.actors.length === 7, `7 agents on stage (${s.actors.length})`)
   check(Math.max(...s.actors.map(a => a.depth)) === 3, 'reaches depth 3')
@@ -42,27 +47,30 @@ async function at(page, ms) {
   check(s.actors.find(a => a.id === 'b1').shown === 'running', 'background indexer works alongside')
   check(/depth 3/.test(s.stats) && /6 helpers/.test(s.stats), `HUD: ${s.stats}`)
   check(/demo/i.test(s.status), `status says demo: ${s.status}`)
-  check(s.scale >= 2, `pixel scale is at least 2x on desktop (${s.scale})`)
+  check(s.rooms.length === 3 && s.rooms[0].title === 'Main office', `three rooms, the main office first ${JSON.stringify(s.rooms)}`)
   await page.screenshot({ path: `${SHOTS}/demo-1440-dark-5.5s.png` })
 
-  // Hover the tester: the tooltip shows its detail.
+  // Hover the tester once it is seated at its desk: the tooltip shows its detail.
+  await at(page, 7000)
+  s = await inspect(page)
+  check(!s.trips.some(t => t.id === 't1'), 'the tester has walked in and sat down by 7s')
   const box = s.boxes.find(b => b.id === 't1')
   await page.mouse.move(box.x + box.w / 2, box.y + box.h / 2)
   await page.clock.runFor(100)
   const tip = await page.locator('#tip').innerText()
   check(await page.locator('#tip').isVisible(), 'tooltip appears on hover')
-  check(/tester/.test(tip) && /write the missing tests/.test(tip) && /spawned by\s*review the change for issue #42/.test(tip), 'tooltip names the agent, its task and its spawner')
+  check(/tester/.test(tip) && /write the missing tests/.test(tip) && /reports to\s*review the change for issue #42/.test(tip), 'tooltip names the agent, its task and who it reports to')
   await page.screenshot({ path: `${SHOTS}/demo-1440-dark-hover.png` })
   await page.mouse.move(5, 5)
 
-  // 2. The packet: the tester hands its result back at 9.5s.
+  // 2. The report: the tester finishes at 9.5s and walks its report to the reviewer.
   await at(page, 9600)
   s = await inspect(page)
   check(s.actors.find(a => a.id === 't1').shown === 'done', 'tester is done at 9.6s')
-  check(s.packets.some(p => p.from === 't1' && p.to === 'r1'), `the tester's result travels to its spawner, the reviewer ${JSON.stringify(s.packets)}`)
-  await page.screenshot({ path: `${SHOTS}/demo-1440-dark-packet.png` })
-  await at(page, 10700)
-  check(!(await inspect(page)).packets.some(p => p.from === 't1'), "the tester's packet arrives and is gone")
+  check(s.trips.some(t => t.id === 't1' && t.kind === 'report' && t.to === 'r1'), `the tester walks its report to its spawner, the reviewer ${JSON.stringify(s.trips)}`)
+  await page.screenshot({ path: `${SHOTS}/demo-1440-dark-report.png` })
+  await at(page, 17000)
+  check(!(await inspect(page)).trips.some(t => t.id === 't1'), 'the tester hands it in and is back at its desk')
 
   // 3. Everyone home at 19s: main idle, nobody waiting.
   await at(page, 19000)
@@ -70,6 +78,7 @@ async function at(page, ms) {
   check(s.actors.find(a => a.id === 'main').shown === 'idle', 'main is idle at 19s')
   check(s.actors.filter(a => a.shown === 'waiting').length === 0, 'nobody waiting at the end')
   check(s.actors.find(a => a.id === 'l1').shown === 'failed', 'the linter stays failed')
+  check(s.inbox === 2, `the boss's inbox holds the two reports from its own team (${s.inbox})`)
   check(errors.length === 0, `no console or page errors (${errors.length}) ${errors.slice(0, 2).join(' | ')}`)
   await ctx.close()
 
@@ -80,8 +89,8 @@ async function at(page, ms) {
     const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
     check(over <= 0, `${w}px ${scheme}: no horizontal scroll (${over})`)
     s = await inspect(page)
-    const fits = s.boxes.every(b => b.x >= 0 && b.x + b.w <= w && b.y >= 0 && b.y + b.h <= h)
-    check(fits, `${w}px ${scheme}: every character is on screen`)
+    const fits = s.boxes.every(b => b.x >= 0 && b.x + b.w <= w && b.w > 0)
+    check(fits, `${w}px ${scheme}: every desk fits the width`)
     check(errors.length === 0, `${w}px ${scheme}: no errors`)
     await page.screenshot({ path: `${SHOTS}/demo-${w}-${scheme}-5.5s.png` })
     await ctx.close()

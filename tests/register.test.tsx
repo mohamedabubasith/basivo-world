@@ -179,7 +179,7 @@ test('/world publishes the browser view, and state.js follows the world', async 
   })
   const dir = '/home/t/.claude/basivo-world/sess-1'
   expect(reply.text).toContain(`file://${dir}/index.html`)
-  for (const file of ['index.html', 'world.js', 'sprites.js', 'demo.js']) expect(writes.has(`${dir}/${file}`)).toBe(true)
+  for (const file of ['index.html', 'world.js', 'demo.js', 'three.min.js']) expect(writes.has(`${dir}/${file}`)).toBe(true)
 
   const snapshot = () => JSON.parse(String(writes.get(`${dir}/state.js`)).replace(/^window\.__BASIVO_WORLD__ = /, '').replace(/;\n$/, ''))
   expect(snapshot().agents.map((a: { id: string }) => a.id)).toEqual(['main'])

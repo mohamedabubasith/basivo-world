@@ -4,146 +4,138 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>basivo world</title>
-<meta name="description" content="Your Claude Code session's agents, live: who spawned whom, what each is doing, and what it costs.">
+<meta name="description" content="Your Claude Code session as a 3D office: the boss in its cabin, its teams at their desks, and the reports walking back.">
 <style>
   :root {
-    --mono: ui-monospace, "Geist Mono", "SF Mono", Menlo, Consolas, monospace;
-    --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-    /* Grid: the board is a lit circuit, the accent is the current running through it. */
-    --violet: #22d3ee;
-    --violet-soft: #7ff3ff;
-    --magenta: #e879f9;
-    --fail: #ff4d6d;
-    --bg: #070b14;
-    --text: #dbe7f5;
-    --muted: #5f7490;
-    --line: #16202e;
-    --panel: #0b1220;
-    /* Sprite rim: near the background, so figures separate without a black cage. */
-    --outline: #050a14;
-    --rim: #3d5a7d;
-    --trousers: #1b2740;
-    --bubble: #0e1a2b;
-    --tile-a: #0c1424;
-    --tile-b: #0a1120;
-    --grid: #13263e;
-    --slab: #11203a;
-    --slab-dark: #060c16;
-    --block-top: #1b3a5c;
-    --block-left: #122844;
-    --block-right: #0a1526;
-    /* Traces: cool and dim at rest, the accent when current flows. */
-    --tether: #1b3550;
-    --trace: #1a3c5a;
-    --trace-hot: #22d3ee;
-    /* The ground is lit glass now, so its labels are light in both themes. */
-    --label: #cfe3f7;
-    --label-muted: #6b84a3;
-    --chip: rgba(7, 11, 20, 0.92);
-    color-scheme: dark;
+    --font: "Geist", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --page: #e8edf2;
+    --card: rgba(255, 255, 255, 0.92);
+    --fg: #0f172a;
+    --muted: #64748b;
+    --border: rgba(15, 23, 42, 0.1);
+    --primary: #7c3aed;
+    --ok: #16a34a;
+    --warn: #b45309;
+    --bad: #dc2626;
+    --shadow: 0 4px 14px -4px rgb(15 23 42 / 0.25);
+    color-scheme: light;
   }
-  @media (prefers-color-scheme: light) {
-    :root {
-      /* Daylight: the same board, lit from above instead of from within. */
-      --violet: #0e7490;
-      --violet-soft: #22d3ee;
-      --magenta: #a21caf;
-      --fail: #be123c;
-      --bg: #dde7f0;
-      --text: #0f1b2a;
-      --muted: #4a6075;
-      --line: #b6c6d6;
-      --panel: #cbd9e6;
-      --outline: #27394d;
-      --rim: #ffffff;
-      --trousers: #3c4a60;
-      --bubble: #ffffff;
-      /* The board is a shade darker than the page, so it reads as an object on it. */
-      --tile-a: #c3d3e2;
-      --tile-b: #bccdde;
-      --grid: #a5bacd;
-      --slab: #9bb0c4;
-      --slab-dark: #7c93a9;
-      --block-top: #e2ecf5;
-      --block-left: #b6c6d6;
-      --block-right: #90a6ba;
-      --tether: #8ba2b8;
-      --trace: #7f9cb5;
-      --trace-hot: #0e7490;
-      --label: #0f1b2a;
-      --label-muted: #4a6075;
-      --chip: rgba(255, 255, 255, 0.94);
-      color-scheme: light;
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #0b0e14;
+      --card: rgba(20, 24, 33, 0.9);
+      --fg: #f1f5f9;
+      --muted: #94a3b8;
+      --border: rgba(148, 163, 184, 0.18);
+      --primary: #a78bfa;
+      --ok: #4ade80;
+      --warn: #fbbf24;
+      --bad: #f87171;
+      --shadow: 0 6px 18px -6px rgb(0 0 0 / 0.8);
+      color-scheme: dark;
     }
   }
+  :root[data-theme="dark"] {
+    --page: #0b0e14; --card: rgba(20, 24, 33, 0.9); --fg: #f1f5f9; --muted: #94a3b8;
+    --border: rgba(148, 163, 184, 0.18); --primary: #a78bfa; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+    --shadow: 0 6px 18px -6px rgb(0 0 0 / 0.8); color-scheme: dark;
+  }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); }
-  body { font-family: var(--sans); -webkit-font-smoothing: antialiased; }
-  #world { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: manipulation; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--page); color: var(--fg); }
+  body { font-family: var(--font); -webkit-font-smoothing: antialiased; }
+  #world { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  #world.dragging { cursor: grabbing; }
+  svg.i { width: 13px; height: 13px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 
   #hud {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 2;
-    display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 20px;
-    padding: 18px 24px 14px; pointer-events: none;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 3;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 16px 22px; pointer-events: none;
   }
-  .brand { font-weight: 300; font-size: 22px; letter-spacing: -0.02em; margin: 0; white-space: nowrap; }
-  /* The wordmark's i is dotted with a violet square, as on basivo.in. */
-  .brand .i { position: relative; }
-  .brand .i::after {
-    content: ""; position: absolute; left: 50%; top: 0.12em; width: 0.2em; height: 0.2em;
-    transform: translateX(-50%); background: var(--violet);
+  .brand { font-weight: 650; font-size: 18px; letter-spacing: -0.02em; margin: 0; white-space: nowrap; }
+  .brand span { color: var(--primary); }
+  #stats { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; min-width: 0; }
+  .stat {
+    display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--border); font-size: 12px; color: var(--muted); white-space: nowrap;
+    backdrop-filter: blur(6px);
   }
-  #stats { font-family: var(--mono); font-size: 12px; color: var(--muted); flex: 1 1 auto; min-width: 0; }
-  #status {
-    font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
-    color: var(--muted); white-space: nowrap;
+  .stat b { color: var(--fg); font-weight: 650; }
+  #status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  #status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  #status[data-mode="live"]::before { background: var(--ok); animation: beat 1.6s ease-in-out infinite; }
+  #status[data-mode="demo"] { color: var(--primary); }
+  #status[data-mode="demo"]::before { background: var(--primary); }
+  #status[data-mode="lost"]::before { background: var(--bad); }
+  @keyframes beat { 50% { opacity: 0.3; } }
+
+  /* Labels that follow the 3D world: name tags, thought bubbles, room signs. */
+  #labels { position: fixed; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+  #labels > * { position: absolute; left: 0; top: 0; will-change: transform; white-space: nowrap; }
+  .tag {
+    display: grid; justify-items: center; padding: 3px 8px 4px; border-radius: 8px;
+    background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow); backdrop-filter: blur(6px);
+    font-size: 11.5px; line-height: 1.25;
   }
-  #status::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 8px; background: var(--muted); vertical-align: 1px; }
-  #status[data-mode="live"]::before { background: var(--violet); animation: beat 1.6s steps(2, jump-none) infinite; }
-  #status[data-mode="demo"] { color: var(--violet-soft); }
-  #status[data-mode="demo"]::before { background: var(--violet-soft); }
-  #status[data-mode="lost"]::before { background: var(--fail); }
-  @media (prefers-color-scheme: light) {
-    /* The soft violet is for ink; on paper it needs the full one to be read. */
-    #status[data-mode="demo"] { color: var(--violet); }
-    #status[data-mode="demo"]::before { background: var(--violet); }
+  .tag .n { font-weight: 600; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+  .tag .d { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+  .tag.boss .n { color: var(--primary); }
+  .tag.faded { opacity: 0.6; }
+  .tag.failed .d { color: var(--bad); }
+  .bubble {
+    display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 12px;
+    background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow);
+    font-size: 11px; font-weight: 600; color: var(--muted);
   }
-  @keyframes beat { 50% { opacity: 0.25; } }
+  .bubble::after {
+    content: ""; position: absolute; left: 50%; bottom: -5px; width: 8px; height: 8px; margin-left: -4px;
+    background: inherit; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); transform: rotate(45deg);
+  }
+  .bubble.running { color: var(--ok); }
+  .bubble.waiting, .bubble.quiet { color: var(--warn); }
+  .bubble.done, .bubble.report, .bubble.brief { color: var(--primary); }
+  .bubble.failed { color: var(--bad); }
+  .sign {
+    padding: 4px 10px; border-radius: 6px; font-size: 11.5px; font-weight: 650; letter-spacing: 0.02em;
+    background: var(--card); border: 1px solid var(--border); color: var(--muted); box-shadow: var(--shadow);
+  }
+  .sign.boss { color: var(--primary); }
 
   #empty {
-    position: fixed; left: 0; right: 0; bottom: 92px; z-index: 1; text-align: center;
-    font-family: var(--mono); font-size: 12px; color: var(--muted); padding: 0 24px; pointer-events: none;
+    position: fixed; left: 0; right: 0; bottom: 64px; z-index: 2; text-align: center; margin: 0;
+    font-size: 13px; color: var(--muted); padding: 0 24px; pointer-events: none;
   }
   #legend {
-    position: fixed; left: 24px; right: 24px; bottom: 18px; z-index: 2;
-    display: flex; flex-wrap: wrap; gap: 4px 18px; pointer-events: none;
-    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    position: fixed; left: 22px; right: 22px; bottom: 16px; z-index: 3;
+    display: flex; flex-wrap: wrap; gap: 4px 16px; pointer-events: none; font-size: 12px; color: var(--muted);
   }
-  #legend b { font-weight: 500; color: var(--text); }
-  #legend .k { display: inline-block; width: 8px; height: 8px; margin-right: 6px; vertical-align: 0; }
-  #legend .violet { background: var(--violet); }
-  #legend .ink { background: var(--tether); }
-  #legend .dash { background: repeating-linear-gradient(90deg, var(--tether) 0 3px, transparent 3px 6px); width: 14px; height: 2px; vertical-align: 3px; }
+  #legend b { color: var(--fg); font-weight: 600; }
 
   #tip {
-    position: fixed; z-index: 3; min-width: 220px; max-width: min(320px, calc(100vw - 16px));
-    padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-    font-family: var(--mono); font-size: 11.5px; line-height: 1.55; color: var(--muted); pointer-events: none;
+    position: fixed; z-index: 4; min-width: 240px; max-width: min(340px, calc(100vw - 16px));
+    padding: 12px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: var(--shadow); backdrop-filter: blur(8px);
+    font-size: 12px; line-height: 1.6; color: var(--muted); pointer-events: none;
   }
-  #tip .tip-title { font-family: var(--sans); font-size: 15px; font-weight: 500; color: var(--text); }
-  #tip .tip-label { color: var(--text); margin-bottom: 6px; overflow-wrap: anywhere; }
+  #tip .tip-title { font-size: 14px; font-weight: 650; color: var(--fg); }
+  #tip .tip-label { color: var(--fg); margin-bottom: 6px; overflow-wrap: anywhere; }
   #tip .tip-row { display: flex; justify-content: space-between; gap: 16px; }
-  #tip .tip-row span:last-child { color: var(--text); text-align: right; overflow-wrap: anywhere; }
+  #tip .tip-row span:last-child { color: var(--fg); text-align: right; overflow-wrap: anywhere; font-family: var(--mono); font-size: 11.5px; }
 
+  #nogl { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--muted); font-size: 14px; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
   @media (max-width: 560px) {
-    #hud { padding: 14px 16px 10px; gap: 4px 12px; }
-    .brand { font-size: 19px; }
-    #stats { order: 3; flex-basis: 100%; font-size: 11px; }
-    #legend { left: 16px; right: 16px; bottom: 12px; gap: 2px 12px; font-size: 10px; }
+    #hud { padding: 12px 14px; }
+    #stats { order: 3; flex-basis: 100%; }
+    #legend { left: 14px; right: 14px; bottom: 10px; font-size: 11px; }
     #legend .wide { display: none; }
-    #empty { bottom: 78px; }
+    /* On a phone the building is small: names live in the tap-for-detail card. */
+    .tag { display: none; }
+    .bubble { height: 20px; padding: 0 6px; font-size: 10px; }
+    .bubble .i { width: 11px; height: 11px; }
+    .sign { font-size: 10px; padding: 2px 6px; }
   }
   @media (prefers-reduced-motion: reduce) {
     #status[data-mode="live"]::before { animation: none; }
@@ -152,27 +144,29 @@
 </head>
 <body>
 <canvas id="world" aria-hidden="true"></canvas>
+<div id="labels" aria-hidden="true"></div>
 
 <header id="hud">
-  <h1 class="brand">bas<span class="i">ı</span>vo world</h1>
-  <div id="stats">—</div>
+  <h1 class="brand">basivo <span>world</span></h1>
+  <div id="stats"></div>
   <div id="status" role="status">Starting</div>
 </header>
 
-<p id="empty" hidden>No helpers yet. They appear here when Claude delegates.</p>
+<p id="empty" hidden>No helpers yet. When Claude delegates, the team walks in.</p>
 
 <footer id="legend" aria-hidden="true">
-  <span><b>blocks</b> = cost, one per ×10 tokens</span>
-  <span><b>sitting</b> = waiting on a helper</span>
-  <span class="wide"><span class="k violet"></span>working</span>
-  <span class="wide"><span class="k dash"></span>background helper</span>
-  <span class="wide">hover or tap anyone for detail</span>
+  <span><b>Boss</b> = main session, in the glass cabin</span>
+  <span><b>Room</b> = one manager's team</span>
+  <span><b>Walking with a paper</b> = taking the job, or bringing the report</span>
+  <span class="wide"><b>Paper on a desk</b> = cost, one sheet per ×10 tokens</span>
+  <span class="wide">Drag to turn · scroll to zoom · hover anyone for detail</span>
 </footer>
 
 <div id="tip" role="tooltip" hidden></div>
+<div id="nogl" hidden>This view needs WebGL, which this browser has switched off.</div>
 <div id="summary" class="sr" aria-live="polite"></div>
 
-<script src="sprites.js"></script>
+<script src="three.min.js"></script>
 <script src="demo.js"></script>
 <script src="world.js"></script>
 </body>
