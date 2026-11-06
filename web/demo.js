@@ -22,6 +22,16 @@ const Demo = (() => {
     Explore: ['Glob', 'Grep', 'Read'],
     linter: ['Bash', 'Bash'],
   }
+  // What each tool works on, per agent type: the line the detail panel shows.
+  const WHAT = {
+    main: { Read: 'docs/issue-42.md', Grep: 'createOrder', Agent: 'review the change for issue #42' },
+    indexer: { Glob: '**/*.{ts,tsx}', Read: 'src/index.ts', Bash: 'git ls-files | wc -l' },
+    reviewer: { Read: 'src/api/orders.ts', Grep: 'validateOrder', Agent: 'write the missing tests' },
+    tester: { Read: 'src/api/orders.test.ts', Edit: 'src/api/orders.test.ts', Bash: 'npm test -- orders' },
+    security: { Grep: 'req.body', Read: 'src/api/routes.ts', WebFetch: 'https://owasp.org/Top10/A03_2021-Injection/' },
+    Explore: { Glob: 'test/fixtures/**', Grep: 'orderFixture', Read: 'test/fixtures/orders.json' },
+    linter: { Bash: 'npx tsc --noEmit' },
+  }
   // Tokens a second of work: fresh input, output, cache read.
   const RATE = {
     main: [40, 90, 9_000],
@@ -50,7 +60,16 @@ const Demo = (() => {
         cacheWrite: Math.round(i * worked * 6),
       }
       const tools = TOOLS[type]
-      const step = Math.floor((t + from * 0.37) / 1_100)
+      const shift = from * 0.37
+      const step = Math.floor((t + shift) / 1_100)
+      const first = Math.floor((from + shift) / 1_100)
+      const last = Math.floor((Math.min(t, to - 1) + shift) / 1_100)
+      const recent = []
+      for (let k = Math.max(first, last - 7); k <= last; k += 1) {
+        const tool = tools[k % tools.length]
+        recent.push({ tool, what: WHAT[type][tool] ?? null, at: epoch + Math.max(from, k * 1_100 - shift) })
+      }
+      const tool = isOver ? null : tools[step % tools.length]
       return {
         id,
         parentId,
@@ -58,7 +77,9 @@ const Demo = (() => {
         label,
         status: isOver ? ending : 'running',
         isBackground,
-        tool: isOver ? null : tools[step % tools.length],
+        tool,
+        what: tool ? (WHAT[type][tool] ?? null) : null,
+        recent,
         toolCalls: Math.floor(worked / 1.1),
         tokens,
         model: type === 'main' ? 'opus' : type === 'Explore' || type === 'indexer' ? 'haiku' : 'sonnet',

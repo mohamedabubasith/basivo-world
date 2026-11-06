@@ -61,6 +61,30 @@ async function at(page, ms) {
   check(await page.locator('#tip').isVisible(), 'tooltip appears on hover')
   check(/tester/.test(tip) && /write the missing tests/.test(tip) && /reports to\s*review the change for issue #42/.test(tip), 'tooltip names the agent, its task and who it reports to')
   await page.screenshot({ path: `${SHOTS}/demo-1440-dark-hover.png` })
+
+  // Click the tester: the panel on the right follows it, live.
+  await page.mouse.click(box.x + box.w / 2, box.y + box.h / 2)
+  await page.clock.runFor(100)
+  s = await inspect(page)
+  check(s.panel === 't1', `clicking the tester opens its panel (${s.panel})`)
+  const card = await page.locator('#panel').innerText()
+  check(/tester/.test(card) && /write the missing tests/.test(card), 'the panel names the agent and its task')
+  check(/now/i.test(card) && /(Read|Edit|Bash|Thinking)/.test(card) && /(orders|npm test)/.test(card), `the panel says what it is running, and on what: ${JSON.stringify(card.slice(0, 160))}`)
+  check(/recent tool calls/i.test(card) && /ago/.test(card), 'the panel lists its recent tool calls')
+  check(/Reports to/.test(card) && /review the change for issue #42/.test(card), 'the panel names its manager')
+  check(!(await page.locator('#tip').isVisible()), 'no tooltip over the agent the panel already shows')
+  const panelBox = await page.locator('#panel').boundingBox()
+  check(panelBox && panelBox.x + panelBox.width >= 1439 && panelBox.width >= 300, 'the panel sits on the right')
+  check(s.boxes.every(b => b.x + b.w <= panelBox.x + 4), 'the office moves left of the panel, nobody hidden under it')
+  await page.screenshot({ path: `${SHOTS}/demo-1440-dark-panel.png` })
+  // Its manager is one click away.
+  await page.locator('#panel .p-person', { hasText: 'review the change' }).click()
+  await page.clock.runFor(100)
+  check((await inspect(page)).panel === 'r1', 'clicking the manager in the panel follows the manager')
+  check(/Its helpers \(2\)/.test(await page.locator('#panel').innerText()), 'the manager lists its two helpers')
+  await page.keyboard.press('Escape')
+  await page.clock.runFor(100)
+  check((await inspect(page)).panel === null && !(await page.locator('#panel').isVisible()), 'Escape closes the panel')
   await page.mouse.move(5, 5)
 
   // 2. The report: the tester finishes at 9.5s and walks its report to the reviewer.
@@ -70,7 +94,7 @@ async function at(page, ms) {
   check(s.trips.some(t => t.id === 't1' && t.kind === 'report' && t.to === 'r1'), `the tester walks its report to its spawner, the reviewer ${JSON.stringify(s.trips)}`)
   await page.screenshot({ path: `${SHOTS}/demo-1440-dark-report.png` })
   await at(page, 17000)
-  check(!(await inspect(page)).trips.some(t => t.id === 't1'), 'the tester hands it in and is back at its desk')
+  check(!(await inspect(page)).trips.some(t => t.id === 't1' && (t.kind === 'report' || t.kind === 'home')), 'the tester hands it in and is back')
 
   // 3. Everyone home at 19s: main idle, nobody waiting.
   await at(page, 19000)
@@ -79,7 +103,33 @@ async function at(page, ms) {
   check(s.actors.filter(a => a.shown === 'waiting').length === 0, 'nobody waiting at the end')
   check(s.actors.find(a => a.id === 'l1').shown === 'failed', 'the linter stays failed')
   check(s.inbox === 2, `the boss's inbox holds the two reports from its own team (${s.inbox})`)
+  // Agents with nothing to do take breaks: a coffee, a chat, the boss at the bookshelf.
+  const breaks = new Set()
+  for (let ms = 19250; ms <= 21750; ms += 250) {
+    await at(page, ms)
+    for (const t of (await inspect(page)).trips) if (['coffee', 'chat', 'stroll'].includes(t.kind)) breaks.add(`${t.id}:${t.kind}`)
+    if (ms === 20500) await page.screenshot({ path: `${SHOTS}/demo-1440-dark-breaks.png` })
+  }
+  check(breaks.size >= 2, `idle agents get up for breaks (${[...breaks].join(', ')})`)
   check(errors.length === 0, `no console or page errors (${errors.length}) ${errors.slice(0, 2).join(' | ')}`)
+  await ctx.close()
+
+  // The theme switch: light ↔ dark, animated, remembered, bubbles intact.
+  ;({ ctx, page, errors } = await open(browser, { width: 1440, height: 900, scheme: 'light' }))
+  await at(page, 5500)
+  await page.click('#theme')
+  // The circle runs on the browser's own animation clock, not the page's frozen one.
+  const closing = await page.evaluate(() => document.getElementById('fade').getAnimations().length)
+  check((await inspect(page)).theme === 'dark', 'the switch turns the office to night')
+  check(closing === 1, `the old view closes into the button as it switches (${closing} animation)`)
+  await page.clock.runFor(1200)
+  check(!(await page.locator('#fade').isVisible()), 'the switch animation ends')
+  const empty = await page.evaluate(() => [...document.querySelectorAll('.bubble')].filter(b => !b.hidden && !b.textContent.trim()).length)
+  check(empty === 0, `every bubble keeps its words after the switch (${empty} empty)`)
+  await page.reload()
+  await page.clock.runFor(500)
+  check((await inspect(page)).theme === 'dark', 'the choice is remembered after a reload')
+  check(errors.length === 0, `theme switch: no errors ${errors.join(' | ')}`)
   await ctx.close()
 
   // 4. Light scheme, and the phone.

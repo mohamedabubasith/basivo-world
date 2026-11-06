@@ -123,6 +123,83 @@
   #tip .tip-row { display: flex; justify-content: space-between; gap: 16px; }
   #tip .tip-row span:last-child { color: var(--fg); text-align: right; overflow-wrap: anywhere; font-family: var(--mono); font-size: 11.5px; }
 
+  /* The detail panel: whoever you clicked, followed live. */
+  #panel {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 5; width: min(360px, 100vw); overflow-y: auto;
+    background: var(--card); border-left: 1px solid var(--border); box-shadow: var(--shadow); backdrop-filter: blur(10px);
+    font-size: 12.5px; color: var(--muted);
+  }
+  #panel-body { padding: 18px 18px 28px; display: grid; gap: 16px; }
+  body.panel-open #hud { right: 360px; }
+  body.panel-open #legend { right: 382px; }
+  .p-head { display: flex; align-items: flex-start; gap: 10px; }
+  .p-title { flex: 1; min-width: 0; }
+  .p-title h2 { margin: 0; font-size: 17px; font-weight: 650; color: var(--fg); letter-spacing: -0.01em; overflow-wrap: anywhere; }
+  .p-sub { margin-top: 2px; font-size: 12px; }
+  .p-close {
+    flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--border); background: transparent; color: var(--muted);
+  }
+  .p-close:hover { color: var(--fg); }
+  button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .p-pill { justify-self: start; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); font-weight: 600; font-size: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .running .dot { background: var(--ok); }
+  .waiting .dot { background: var(--warn); }
+  .done .dot { background: var(--primary); }
+  .failed .dot { background: var(--bad); }
+  .p-sec h3 { margin: 0 0 8px; font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .p-now { border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: grid; gap: 6px; }
+  .p-now-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 650; color: var(--fg); }
+  .p-now-head .i { width: 16px; height: 16px; }
+  .p-now.running .p-now-head .i { color: var(--ok); }
+  .p-now.waiting .p-now-head .i { color: var(--warn); }
+  .p-now.failed .p-now-head .i { color: var(--bad); }
+  .p-now-sub { font-size: 12.5px; overflow-wrap: anywhere; }
+  .p-now-sub.code { font-family: var(--mono); font-size: 12px; color: var(--fg); }
+  .p-away { font-size: 12px; color: var(--primary); }
+  .p-task { margin: 0; color: var(--fg); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+  .p-none { margin: 0; }
+  .p-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .p-steps li { display: grid; gap: 3px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .p-steps li:first-child .p-step-top b { color: var(--primary); }
+  .p-steps li:last-child { border-bottom: 0; padding-bottom: 0; }
+  .p-step-top { display: flex; align-items: center; gap: 6px; }
+  .p-step-top b { color: var(--fg); font-weight: 600; }
+  .p-step-top .when { margin-left: auto; font-size: 11px; white-space: nowrap; }
+  .p-steps code { font-family: var(--mono); font-size: 11.5px; color: var(--fg); overflow-wrap: anywhere; }
+  .p-team { display: grid; gap: 4px; }
+  .p-k { font-size: 11.5px; margin-top: 4px; }
+  .p-person {
+    display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 6px 10px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--border); background: transparent; color: var(--fg); font: inherit; text-align: left;
+  }
+  .p-person:hover:not(:disabled) { border-color: var(--primary); }
+  .p-person:disabled { cursor: default; color: var(--muted); }
+  .p-person .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .p-person .st { font-size: 11.5px; color: var(--muted); }
+  .p-cost { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 0; }
+  .p-cost dt { margin: 0; }
+  .p-cost dd { margin: 0; text-align: right; font-family: var(--mono); color: var(--fg); }
+
+  /* The theme switch: a sun by day, a moon by night. */
+  #theme {
+    pointer-events: auto; position: relative; flex: none; width: 34px; height: 34px; border-radius: 999px; cursor: pointer;
+    display: grid; place-items: center; overflow: hidden;
+    border: 1px solid var(--border); background: var(--card); color: var(--fg); backdrop-filter: blur(6px);
+  }
+  #theme:hover { border-color: var(--primary); }
+  #theme svg { position: absolute; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+    transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.35s; }
+  #theme .moon { transform: rotate(-90deg) scale(0.4); opacity: 0; }
+  :root[data-dark="1"] #theme .sun { transform: rotate(90deg) scale(0.4); opacity: 0; }
+  :root[data-dark="1"] #theme .moon { transform: none; opacity: 1; }
+  /* The old picture, shrinking into the switch while the new one shows beneath. */
+  #fade { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+  body, .stat, .tag, .bubble, .sign, #panel, #tip, #theme, .p-person, .p-now, .p-pill {
+    transition: background-color 0.6s ease, color 0.6s ease, border-color 0.6s ease;
+  }
+
   #nogl { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--muted); font-size: 14px; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
@@ -139,6 +216,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     #status[data-mode="live"]::before { animation: none; }
+    #theme svg, body, .stat, .tag, .bubble, .sign, #panel, #tip { transition: none; }
   }
 </style>
 </head>
@@ -150,7 +228,12 @@
   <h1 class="brand">basivo <span>world</span></h1>
   <div id="stats"></div>
   <div id="status" role="status">Starting</div>
+  <button id="theme" type="button" aria-label="Switch to dark mode">
+    <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+  </button>
 </header>
+<img id="fade" alt="" hidden>
 
 <p id="empty" hidden>No helpers yet. When Claude delegates, the team walks in.</p>
 
@@ -159,10 +242,12 @@
   <span><b>Room</b> = one manager's team</span>
   <span><b>Walking with a paper</b> = taking the job, or bringing the report</span>
   <span class="wide"><b>Paper on a desk</b> = cost, one sheet per ×10 tokens</span>
-  <span class="wide">Drag to turn · scroll to zoom · hover anyone for detail</span>
+  <span><b>Coffee or a chat</b> = idle, on a break</span>
+  <span class="wide">Click anyone to follow them · drag to turn · scroll to zoom</span>
 </footer>
 
 <div id="tip" role="tooltip" hidden></div>
+<aside id="panel" aria-label="Agent detail" hidden><div id="panel-body"></div></aside>
 <div id="nogl" hidden>This view needs WebGL, which this browser has switched off.</div>
 <div id="summary" class="sr" aria-live="polite"></div>
 

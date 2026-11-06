@@ -119,3 +119,25 @@ test('tokens format compactly and weigh by the published ratios', async () => {
   expect(W.fmtTokens(2_500_000)).toBe('2.5M')
   expect(W.weighted({ input: 100, output: 10, cacheRead: 1000, cacheWrite: 8 })).toBe(260)
 })
+
+test('a tool call says what it works on, and the last few are remembered', async () => {
+  let w = crew()
+  expect(W.whatOf({ tool: 'Bash', command: 'npm   test\n -- orders' })).toBe('npm test -- orders')
+  expect(W.whatOf({ tool: 'Read', file_path: '/src/a.ts' })).toBe('/src/a.ts')
+  expect(W.whatOf({ tool: 'Grep', pattern: 'createOrder', path: 'src' })).toBe('createOrder')
+  expect(W.whatOf({ tool: 'TodoWrite', todos: [] })).toBe(null)
+  expect(W.whatOf({ command: 'x'.repeat(500) })?.length).toBe(140)
+  // Secrets are blanked before the line reaches the state file.
+  const said = W.whatOf({ command: 'curl -H "Authorization: Bearer abc123" --token=s3cr3t api_key: k9' }) ?? ''
+  expect(said).not.toContain('abc123')
+  expect(said).not.toContain('s3cr3t')
+  expect(said).not.toContain('k9')
+  w = W.toolStart(w, 'p1', 'Read', 7, '/src/a.ts')
+  expect(W.view(w, 8).agents.find(a => a.id === 'p1')?.what).toBe('/src/a.ts')
+  for (let i = 0; i < 12; i += 1) w = W.toolStart(w, 'p1', 'Grep', 10 + i, `q${i}`)
+  const recent = W.view(w, 30).agents.find(a => a.id === 'p1')?.recent ?? []
+  expect(recent.length).toBe(W.RECENT)
+  expect(recent[recent.length - 1]).toEqual({ tool: 'Grep', what: 'q11', at: 21 })
+  w = W.toolEnd(w, 'p1', 30)
+  expect(W.view(w, 31).agents.find(a => a.id === 'p1')?.what).toBe(null)
+})

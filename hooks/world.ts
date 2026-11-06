@@ -4,9 +4,9 @@
 
 export const MAIN = 'main'
 
-import type { Agent, Status, Tokens, World } from '../types'
+import type { Agent, Status, Step, Tokens, World } from '../types'
 
-export type { Agent, Status, Tokens, World }
+export type { Agent, Status, Step, Tokens, World }
 
 // The usage fields every model request reports.
 export type Usage = {
@@ -50,6 +50,8 @@ export function emptyWorld(at: number): World {
         status: 'idle',
         isBackground: false,
         tool: null,
+        what: null,
+        recent: [],
         toolCalls: 0,
         tokens: zero(),
         model: null,
@@ -93,6 +95,8 @@ export function spawn(
     status: 'running',
     isBackground: s.isBackground,
     tool: existing?.tool ?? null,
+    what: existing?.what ?? null,
+    recent: existing?.recent ?? [],
     toolCalls: existing?.toolCalls ?? 0,
     tokens: existing?.tokens ?? zero(),
     model: s.model ?? existing?.model ?? null,
@@ -112,18 +116,48 @@ export function turnStart(w: World, agentId: string | undefined, at: number): Wo
   return patch(w, loopOf(agentId), at, a => ({ ...a, status: 'running', lastAt: at, endedAt: null }))
 }
 
-export function toolStart(w: World, agentId: string | undefined, tool: string, at: number): World {
+// How many tool calls each agent remembers for the detail panel.
+export const RECENT = 8
+// The arguments that say what a call is about, in the order they are looked for.
+const ARG_KEYS = ['command', 'file_path', 'notebook_path', 'pattern', 'url', 'query', 'description', 'path', 'prompt'] as const
+const CLIP = 140
+
+// What a tool call is working on, as one short line: Bash's command, Read's file, a
+// search's pattern. Values after words like token, key or password are blanked, since
+// the line is written to a file on disk.
+export function whatOf(args: Record<string, unknown>): string | null {
+  for (const k of ARG_KEYS) {
+    const v = args[k]
+    if (typeof v !== 'string' || !v.trim()) continue
+    const line = v
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b(bearer|token|api[_-]?key|secret|password|passwd)(["']?\s*[:=]?\s*)("[^"]*"|'[^']*'|[^\s"']+)/gi, '$1$2•••')
+    return line.length > CLIP ? `${line.slice(0, CLIP - 1)}…` : line
+  }
+  return null
+}
+
+export function toolStart(
+  w: World,
+  agentId: string | undefined,
+  tool: string,
+  at: number,
+  what: string | null = null,
+): World {
   return patch(w, loopOf(agentId), at, a => ({
     ...a,
     status: a.status === 'done' || a.status === 'failed' ? a.status : 'running',
     tool,
+    what,
+    recent: [...(a.recent ?? []), { tool, what, at }].slice(-RECENT),
     toolCalls: a.toolCalls + 1,
     lastAt: at,
   }))
 }
 
 export function toolEnd(w: World, agentId: string | undefined, at: number): World {
-  return patch(w, loopOf(agentId), at, a => ({ ...a, tool: null, lastAt: at }))
+  return patch(w, loopOf(agentId), at, a => ({ ...a, tool: null, what: null, lastAt: at }))
 }
 
 export function addUsage(
@@ -147,9 +181,9 @@ export function addUsage(
 export function complete(w: World, agentId: string | undefined, reason: TurnEnd, at: number): World {
   const id = loopOf(agentId)
   // The main loop does not finish: it waits for the next prompt.
-  if (id === MAIN) return patch(w, id, at, a => ({ ...a, status: 'idle', tool: null, lastAt: at }))
+  if (id === MAIN) return patch(w, id, at, a => ({ ...a, status: 'idle', tool: null, what: null, lastAt: at }))
   const status: Status = reason === 'answer' ? 'done' : reason === 'aborted' ? 'stopped' : 'failed'
-  return patch(w, id, at, a => ({ ...a, status, tool: null, lastAt: at, endedAt: at }))
+  return patch(w, id, at, a => ({ ...a, status, tool: null, what: null, lastAt: at, endedAt: at }))
 }
 
 const fromRoster: Record<RosterEntry['status'], Status> = {
@@ -186,6 +220,7 @@ export function reconcile(w: World, roster: readonly RosterEntry[], at: number):
         status,
         parentId: r.parentId ?? a.parentId ?? MAIN,
         tool: isOver ? null : a.tool,
+        what: isOver ? null : a.what,
         endedAt: isOver ? (a.endedAt ?? at) : null,
       }
     })

@@ -53,16 +53,22 @@ crew, and says so in the corner — demo data is never shown as live.
 | **Clock** in the bubble | Quiet for 90s or more. Usually one long request thinking; not necessarily stuck. |
 | **Walking in with a paper** ("brief") | Just spawned: it took the job at its manager's desk and is walking the corridors to its own. |
 | **Walking back with a paper** ("report") | Done (or ✗ failed): it hands the report in at its manager's desk, and the paper joins the stack there. |
+| **Coffee, a chat, the bookshelf** | Idle or finished, on a break. Nobody who is working or waiting leaves their desk. |
 | **Paper on a desk** | Cost: one sheet per ×10 cost-weighted tokens. The second stack on a manager's desk is reports in. |
 | `bg` on the name tag | A background helper, which doesn't block its manager. |
 | `?` on the name tag | Its spawner was never seen (say, it started before a reload). It sits in the main office and reports to no one, never a guessed manager. |
 
-Drag to turn the building, scroll to zoom, double-click to reset.
+Drag to turn the building, scroll to zoom, double-click to reset. The sun/moon button
+in the corner switches day and night, and the page remembers your choice; until you
+choose, it follows your system.
 
-Hover or tap a desk for the detail: their task, model, tools used, and tokens split into
-input, output, cache read and cache written.
+**Click anyone** and a panel opens on the right and follows them live: what they are
+running now and on what (the command, file, pattern or URL), their last eight tool calls,
+their task, who they report to, the helpers they spawned (click one to follow it), and
+their tokens split into input, output, cache read and cache written. Escape closes it.
+Hover for a quick card.
 
-![Hovering the tester: its task, who spawned it, and its tokens](docs/world-detail.png)
+![Clicking the tester: the panel shows what it runs now, its recent tool calls, its manager and helpers](docs/world-detail.png)
 
 ## Why it is built this way
 
@@ -99,8 +105,10 @@ Only after you run `/world`, and only on your machine:
   state.js                                      the agent tree, rewritten as it changes
 ```
 
-`state.js` holds agent types, **the task each helper was given**, tool names, models and
-token counts. Task descriptions can contain whatever you asked Claude to do, so treat the
+`state.js` holds agent types, **the task each helper was given**, tool names, **what each
+recent tool call worked on** (a command, file path, search pattern or URL, clipped to 140
+characters, with values after words like `token`, `key` or `password` blanked), models
+and token counts. Task descriptions can contain whatever you asked Claude to do, so treat the
 folder as you would your session transcripts. Nothing is sent anywhere. Delete the folder
 whenever you like.
 

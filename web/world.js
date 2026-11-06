@@ -14,6 +14,10 @@
   const HAND_MS = 900 // at the manager's desk, handing the report in
   const WALK = 4.5 // metres a second, at the least
   const LEG_S = 2.2 // no single walk takes longer than this
+  const STROLL = 1.8 // metres a second, on a break: nobody hurries to the coffee
+  const REST_MS = 2500 // at the least, sat idle this long before getting up
+  const BREAK_MS = 3500 // at the least, this long at the coffee, a colleague or the shelf
+  const CARRY = new Set(['brief', 'in', 'report']) // legs walked with a paper in hand
   // The floor plan, in metres.
   const HALL = 2.4 // the hallway down the left side
   const CORR = 2.6 // the corridor in front of each row of rooms
@@ -30,6 +34,8 @@
   const el = id => document.getElementById(id)
   const hud = { bar: el('hud'), stats: el('stats'), status: el('status'), empty: el('empty'), summary: el('summary'), legend: el('legend') }
   const tip = el('tip')
+  const panel = el('panel')
+  const panelBody = el('panel-body')
   const labels = el('labels')
   const canvas = el('world')
 
@@ -70,6 +76,11 @@
   const furniture = new THREE.Group()
   const people = new THREE.Group()
   scene.add(building, furniture, people)
+  // A ring on the floor under whoever the panel follows.
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.55, 40), new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.85 }))
+  ring.rotation.x = -Math.PI / 2
+  ring.visible = false
+  scene.add(ring)
   if (renderer) {
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1))
     renderer.shadowMap.enabled = true
@@ -111,7 +122,22 @@
           hemi: [0xffffff, 0x8a7a66, 1.0], sun: [0xfff2dd, 0.95], exposure: 1,
         }
   }
-  let pal = palette(darkQuery.matches)
+  // Light or dark: the switch's choice, remembered in this browser, else the system's.
+  const THEME_KEY = 'basivo-world-theme'
+  let chosen = null
+  try {
+    chosen = localStorage.getItem(THEME_KEY)
+  } catch {}
+  const wantsDark = () => (chosen ? chosen === 'dark' : darkQuery.matches)
+  let pal = palette(wantsDark())
+  function markTheme() {
+    const root = document.documentElement
+    if (chosen) root.dataset.theme = chosen
+    else delete root.dataset.theme
+    root.dataset.dark = pal.isDark ? '1' : ''
+    el('theme').setAttribute('aria-label', pal.isDark ? 'Switch to light mode' : 'Switch to dark mode')
+  }
+  markTheme()
 
   function applyLight() {
     hemi.color.set(pal.hemi[0])
@@ -122,12 +148,60 @@
   }
   applyLight()
 
-  darkQuery.addEventListener('change', () => {
-    pal = palette(darkQuery.matches)
+  function applyTheme() {
+    pal = palette(wantsDark())
+    markTheme()
     applyLight()
     mats.clear()
     for (const actor of actors.values()) rebuildActor(actor)
     builtKey = ''
+  }
+  darkQuery.addEventListener('change', () => {
+    if (!chosen) applyTheme()
+  })
+
+  // The switch: a snapshot of the old scene sits on top and shrinks into the button
+  // as a closing circle, so the new light spreads out from where you clicked.
+  const fade = el('fade')
+  let fading = null
+  el('theme').addEventListener('click', () => {
+    chosen = pal.isDark ? 'light' : 'dark'
+    try {
+      localStorage.setItem(THEME_KEY, chosen)
+    } catch {}
+    let shot = null
+    if (renderer && !calm.matches) {
+      try {
+        // Flattened onto the old background, so nothing of the new one shows through
+        // the canvas's see-through pixels while it shrinks away.
+        renderer.render(scene, camera)
+        const flat = document.createElement('canvas')
+        flat.width = canvas.width
+        flat.height = canvas.height
+        const g = flat.getContext('2d')
+        g.fillStyle = getComputedStyle(document.body).backgroundColor
+        g.fillRect(0, 0, flat.width, flat.height)
+        g.drawImage(canvas, 0, 0)
+        shot = flat.toDataURL('image/jpeg', 0.92)
+      } catch {}
+    }
+    applyTheme()
+    if (!shot) return
+    const r = el('theme').getBoundingClientRect()
+    const x = r.left + r.width / 2
+    const y = r.top + r.height / 2
+    const far = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y))
+    fading?.cancel()
+    fade.src = shot
+    fade.hidden = false
+    fading = fade.animate([{ clipPath: `circle(${far}px at ${x}px ${y}px)` }, { clipPath: `circle(0px at ${x}px ${y}px)` }], {
+      duration: 900,
+      easing: 'cubic-bezier(0.65, 0, 0.35, 1)',
+    })
+    fading.onfinish = () => {
+      fade.hidden = true
+      fading = null
+    }
   })
 
   // ---- shared geometry and materials ---------------------------------------
@@ -209,6 +283,9 @@
     done: '<path d="M20 6 9 17l-5-5"/>',
     fail: '<path d="M18 6 6 18M6 6l12 12"/>',
     stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
+    coffee: '<path d="M10 2v2"/><path d="M14 2v2"/><path d="M6 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/>',
+    chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+    book: '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>',
     file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8M16 17H8M10 9H8"/>',
   }
   function icon(name) {
@@ -265,6 +342,51 @@
   const visitOf = id => () => {
     const s = plan.seats.get(id)
     return s ? { x: s.x + s.visit[0], z: s.visit[1], room: s.room, face: [s.x, s.deskZ] } : null
+  }
+
+  // Break spots. The coffee corner of a row is in the hallway, against the outer wall,
+  // level with that row's corridor; it is a place of its own, so routes leave the room.
+  const coffeeOf = id => () => {
+    const s = plan.seats.get(id)
+    if (!s) return null
+    const c = s.room.corr
+    return { x: 0.95, z: c, room: { door: HALL / 2, aisle: c, corr: c, row: s.room.row }, face: [0, c] }
+  }
+  // The boss stays in the cabin: the bookshelf, or the window in the far corner.
+  const cabinSpot = which => () => {
+    const s = plan.seats.get('main')
+    if (!s) return null
+    const r = s.room
+    return which ? { x: r.x + 1.2, z: r.z + 1.15, room: r, face: [r.x + 1.2, r.z] } : { x: r.x + r.w - 1.7, z: r.z + 1.0, room: r, face: [r.x + r.w - 1.3, r.z] }
+  }
+
+  // An agent with nothing to do does what people in an office do: it gets up, has a
+  // coffee or a word with a colleague, and comes back. Working and waiting agents stay
+  // at their desks, so a walk never hides what the session is doing.
+  function maybeBreak(actor, now) {
+    const a = actor.agent
+    if (calm.matches || actor.legs.length || isActive(a) || !plan.seats.has(a.id)) {
+      actor.breakAt = null
+      return
+    }
+    actor.breaks ??= 0
+    actor.breakAt ??= now + REST_MS + (hash(`${a.id}:${actor.breaks}`) % 5000)
+    if (now < actor.breakAt) return
+    actor.breakAt = null
+    actor.breaks += 1
+    const pick = hash(`${a.id}/${actor.breaks}`)
+    const seat = plan.seats.get(a.id)
+    const home = homeOf(a.id)
+    const hold = BREAK_MS + (pick % 3000)
+    if (seat.isBoss) {
+      const to = cabinSpot(pick % 2)
+      actor.legs.push({ kind: 'stroll', from: home, to, hold, direct: true }, { kind: 'back', from: to, to: home, hold: 0, direct: true })
+      return
+    }
+    const mates = seat.room.members.filter(id => id !== a.id && actors.has(id))
+    const isChat = mates.length > 0 && pick % 3 === 0
+    const to = isChat ? visitOf(mates[(pick >>> 3) % mates.length]) : coffeeOf(a.id)
+    actor.legs.push({ kind: isChat ? 'chat' : 'coffee', from: home, to, hold }, { kind: 'back', from: to, to: home, hold: 0 })
   }
 
   function apply(next) {
@@ -414,6 +536,8 @@
     mesh(box(W, 0.3, 0.15), mat(pal.cap), W / 2, 0.15, D, building)
     mesh(box(0.15, 0.3, D), mat(pal.cap), W, 0.15, D / 2, building)
 
+    // A coffee corner per row, in the hallway against the outer wall.
+    for (const c of new Set(rooms.map(r => r.corr))) coffeeCorner(c)
     for (const r of rooms) {
       const cx = r.x + r.w / 2
       const cz = r.z + DEPTH / 2
@@ -483,6 +607,18 @@
     for (const [x, z] of [[r.x, r.z], [r.x + r.w, r.z], [r.x, r.z + DEPTH], [r.x + r.w, r.z + DEPTH], [d0, r.z + DEPTH], [d1, r.z + DEPTH]]) {
       mesh(box(0.08, H, 0.08), frame, x, H / 2, z, building)
     }
+  }
+
+  function coffeeCorner(z) {
+    mesh(box(0.55, 0.9, 1.5), mat(pal.desk), 0.32, 0.45, z, building)
+    mesh(box(0.6, 0.04, 1.56), mat(pal.woodDark), 0.32, 0.92, z, building)
+    mesh(box(0.34, 0.46, 0.34), mat(pal.monitor), 0.3, 1.17, z - 0.35, building)
+    mesh(box(0.05, 0.08, 0.12), mat(pal.screenOn, { emissive: pal.screenOn, emissiveIntensity: 0.8 }), 0.48, 1.25, z - 0.35, building)
+    const cup = geo('cup', () => new THREE.CylinderGeometry(0.05, 0.04, 0.1, 10))
+    for (const [dz, c] of [[0.1, '#fbfaf6'], [0.3, '#d07a8c'], [0.45, '#6c8fd6']]) mesh(cup, mat(c), 0.38, 0.99, z + dz, building)
+    // A water cooler beside it.
+    mesh(geo('cooler', () => new THREE.CylinderGeometry(0.17, 0.17, 0.9, 14)), mat(pal.wall), 0.3, 0.45, z + 1.05, building)
+    mesh(geo('bottle', () => new THREE.CylinderGeometry(0.14, 0.14, 0.38, 14)), mat(pal.glass, { transparent: true, opacity: 0.6, roughness: 0.1 }), 0.3, 1.09, z + 1.05, building)
   }
 
   function plant(x, z) {
@@ -590,6 +726,7 @@
     labels.append(actor.tag, actor.bubble)
     actor.papersShown = -1
     actor.trayShown = -1
+    actor.bubbleKey = null
     actor.placed = false
   }
 
@@ -667,10 +804,14 @@
       actor.legs.shift()
       return null
     }
-    const pts = route(from, to)
+    const pts = leg.direct ? [[from.x, from.z], [to.x, to.z]] : route(from, to)
     let len = 0
     for (let i = 1; i < pts.length; i += 1) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])
-    const speed = calm.matches ? Infinity : Math.max(WALK, len / LEG_S)
+    // On an errand nobody keeps the boss waiting; a break is taken at a stroll. Called
+    // back to work mid-break, the agent heads straight back.
+    if (!CARRY.has(leg.kind) && leg.kind !== 'home' && isActive(actor.agent)) leg.hold = 0
+    const isErrand = CARRY.has(leg.kind) || leg.kind === 'home'
+    const speed = calm.matches ? Infinity : isErrand ? Math.max(WALK, len / LEG_S) : isActive(actor.agent) ? WALK : STROLL
     leg.d = Math.min(len, (leg.d ?? 0) + speed * dt)
     const at = along(pts, leg.d)
     const moving = leg.d < len
@@ -723,6 +864,7 @@
     desk.g.rotation.y = seat.facing === 0 ? Math.PI : 0
     const isStalled = a.shown === 'running' && wall - a.lastAt > STALL_MS
     const isWorking = a.shown === 'running' && !isStalled
+    maybeBreak(actor, now)
     const trip = walk(actor, dt, now)
     const t = now / 1000 + actor.phase
 
@@ -740,7 +882,8 @@
     }
 
     const P = person
-    P.paper.visible = Boolean(trip && trip.kind !== 'home')
+    const isCarrying = Boolean(trip && CARRY.has(trip.kind))
+    P.paper.visible = isCarrying
     if (trip) {
       // Out of the chair: walking, or standing at the manager's desk.
       P.g.position.set(trip.x, 0, trip.z)
@@ -748,8 +891,10 @@
       const swing = trip.moving ? Math.sin(t * 11) * 0.6 : 0
       P.legs[0].rotation.x = swing
       P.legs[1].rotation.x = -swing
-      P.arms[0].rotation.x = trip.kind === 'home' ? -swing * 0.8 : -0.9
-      P.arms[1].rotation.x = trip.kind === 'home' ? swing * 0.8 : -0.9
+      // A paper is carried in both hands; otherwise the arms swing, or one lifts a cup.
+      const sip = trip.kind === 'coffee' && !trip.moving ? -1.6 - Math.max(0, Math.sin(t * 1.3)) * 0.5 : null
+      P.arms[0].rotation.x = isCarrying ? -0.9 : -swing * 0.8
+      P.arms[1].rotation.x = isCarrying ? -0.9 : (sip ?? swing * 0.8)
       P.g.position.y = trip.moving ? Math.abs(Math.sin(t * 11)) * 0.05 : 0
       P.head.rotation.x = 0
     } else {
@@ -775,7 +920,12 @@
 
     const headY = trip ? 2.1 : 1.85
     const headAt = toScreen(P.g.position.x, headY + P.g.position.y, P.g.position.z)
-    const s = trip ? (trip.kind === 'home' ? stateOf(a, wall) : { cls: trip.kind === 'report' ? (a.shown === 'failed' ? 'failed' : 'report') : 'brief', icon: trip.kind === 'report' && a.shown === 'failed' ? 'fail' : 'file', text: trip.kind === 'report' ? 'report' : 'brief' }) : stateOf(a, wall)
+    const s = !trip || trip.kind === 'home' || trip.kind === 'back' || (trip.moving && !CARRY.has(trip.kind))
+      ? stateOf(a, wall)
+      : trip.kind === 'coffee' ? { cls: 'brief', icon: 'coffee', text: 'coffee' }
+      : trip.kind === 'chat' ? { cls: 'brief', icon: 'chat', text: 'chat' }
+      : trip.kind === 'stroll' ? { cls: 'brief', icon: 'book', text: 'break' }
+      : { cls: trip.kind === 'report' ? (a.shown === 'failed' ? 'failed' : 'report') : 'brief', icon: trip.kind === 'report' && a.shown === 'failed' ? 'fail' : 'file', text: trip.kind === 'report' ? 'report' : 'brief' }
     const bubbleKey = s ? `${s.cls}|${s.icon}|${s.text}` : ''
     if (actor.bubbleKey !== bubbleKey) {
       actor.bubbleKey = bubbleKey
@@ -824,13 +974,16 @@
     }
     const top = hud.bar.offsetHeight + 8
     const bottom = hud.legend.offsetHeight + 28
-    const roomW = innerWidth - 24
+    // An open panel on the right takes its width out of the stage.
+    const side = !panel.hidden && innerWidth > 560 ? panel.offsetWidth : 0
+    const avail = innerWidth - side
+    const roomW = avail - 24
     const roomH = Math.max(100, innerHeight - top - bottom)
     const scale = Math.min(roomW / (maxX - minX), roomH / (maxY - minY)) * zoom
     const cx = (minX + maxX) / 2
     const cy = (minY + maxY) / 2
-    camera.left = cx - innerWidth / 2 / scale
-    camera.right = cx + innerWidth / 2 / scale
+    camera.left = cx - avail / 2 / scale
+    camera.right = camera.left + innerWidth / scale
     camera.top = cy + (top + roomH / 2) / scale
     camera.bottom = camera.top - innerHeight / scale
     camera.updateProjectionMatrix()
@@ -864,10 +1017,18 @@
       const at = toScreen(r.x + r.w / 2, r.kind === 'boss' ? 2.45 : PART_H + 0.25, r.z + 0.05)
       s.style.transform = `translate(${Math.round(at[0])}px, ${Math.round(at[1])}px) translate(-50%, -100%)`
     }
+    const followed = pinned ? actors.get(pinned) : null
+    ring.visible = Boolean(followed)
+    if (followed) {
+      ring.position.set(followed.person.g.position.x, 0.06, followed.person.g.position.z)
+      ring.material.color.set(pal.violet)
+      ring.scale.setScalar(1 + Math.sin(now / 300) * 0.06)
+    }
     if (renderer) renderer.render(scene, camera)
     // Hover is re-judged every frame, so a desk that glides under a still pointer counts.
     if (pointer && !drag) hovered = hitAt(...pointer)
     updateTip()
+    renderPanel()
     requestAnimationFrame(frame)
   }
 
@@ -917,7 +1078,7 @@
   }
 
   function updateTip() {
-    const id = pinned ?? hovered
+    const id = hovered && hovered !== pinned ? hovered : null
     const actor = id ? actors.get(id) : null
     const b = id ? boxes.find(x => x.id === id) : null
     if (!actor || !b) {
@@ -966,6 +1127,144 @@
     tip.style.top = `${Math.max(8, Math.min(innerHeight - tip.offsetHeight - 8, b.y))}px`
   }
 
+  // ---- the detail panel ----------------------------------------------------
+
+  // Click anyone: a panel on the right follows them, with what they are running now,
+  // their last few tool calls, their manager and helpers, and what they have cost.
+  function follow(id) {
+    pinned = id && actors.has(id) ? id : null
+    panel.hidden = !pinned
+    document.body.classList.toggle('panel-open', Boolean(pinned))
+    panel.dataset.key = ''
+  }
+
+  function nowLine(a, wall) {
+    if (a.shown === 'running' && wall - a.lastAt > STALL_MS) return { icon: 'clock', head: `Quiet for ${ago(wall - a.lastAt)}`, sub: 'One long request, most likely: thinking, not stuck.' }
+    if (a.shown === 'running') return a.tool ? { icon: iconFor(a.tool), head: a.tool.replace(/^mcp__/, ''), sub: a.what ?? '', isCode: true } : { icon: 'think', head: 'Thinking', sub: 'Between tool calls: the model is writing.' }
+    const kids = view?.agents.filter(k => k.parentId === a.id && isActive(k) && !k.isBackground) ?? []
+    if (a.shown === 'waiting') return { icon: 'wait', head: `Waiting on ${kids.length || 'a'} helper${kids.length === 1 ? '' : 's'}`, sub: kids.map(nameOf).join(', ') }
+    if (a.shown === 'done') return { icon: 'done', head: 'Done', sub: 'Its report is handed in.' }
+    if (a.shown === 'failed') return { icon: 'fail', head: 'Failed', sub: 'It handed in what it had.' }
+    if (a.shown === 'stopped') return { icon: 'stop', head: 'Stopped', sub: '' }
+    return { icon: 'coffee', head: 'Idle', sub: a.id === 'main' ? 'Waiting for your next prompt.' : '' }
+  }
+
+  function renderPanel() {
+    const actor = pinned ? actors.get(pinned) : null
+    if (!actor) {
+      if (!panel.hidden) follow(null)
+      return
+    }
+    const a = actor.agent
+    const wall = Date.now()
+    const parent = a.parentId && !a.isOrphan ? view?.agents.find(p => p.id === a.parentId) : null
+    const kids = view?.agents.filter(k => k.parentId === a.id) ?? []
+    const now = nowLine(a, wall)
+    const away = actor.legs[0]?.kind
+    const steps = (a.recent ?? []).slice().reverse()
+    const data = {
+      name: a.id === 'main' ? 'Boss' : nameOf(a),
+      type: a.id === 'main' ? 'main session' : a.type,
+      shown: a.shown,
+      model: a.model ?? '—',
+      since: [a.startedAt, a.endedAt],
+      now,
+      away: away === 'coffee' ? 'at the coffee corner' : away === 'chat' ? 'talking to a colleague' : away === 'stroll' ? 'stretching their legs' : away === 'brief' ? 'taking the brief' : away === 'report' ? 'handing in the report' : '',
+      task: a.id === 'main' ? '' : a.label,
+      steps: steps.map(st => [st.tool, st.what ?? '', st.at]),
+      parent: parent ? [parent.id, nameOf(parent), parent.shown] : a.isOrphan ? ['', 'not seen', ''] : null,
+      kids: kids.map(k => [k.id, nameOf(k), k.shown]),
+      cost: [fmt(a.tokens.input), fmt(a.tokens.output), fmt(a.tokens.cacheRead), fmt(a.tokens.cacheWrite), fmt(a.weight), String(a.toolCalls)],
+      room: plan.seats.get(a.id)?.room.name ?? '—',
+    }
+    // Rebuilt only when what it says changes, never just because a second passed, so a
+    // click inside it is never lost to a rebuild. The times tick in place.
+    const key = JSON.stringify(data)
+    if (panel.dataset.key !== key) {
+      panel.dataset.key = key
+      buildPanel(data)
+    }
+    for (const n of panelBody.querySelectorAll('[data-at]')) {
+      const text = n.dataset.end ? ago(Number(n.dataset.end) - Number(n.dataset.at)) : `${ago(wall - Number(n.dataset.at))}${n.dataset.suffix ?? ''}`
+      if (n.textContent !== text) n.textContent = text
+    }
+  }
+
+  const ticking = (cls, at, end, suffix) => {
+    const n = h('span', cls)
+    n.dataset.at = String(at)
+    if (end) n.dataset.end = String(end)
+    if (suffix) n.dataset.suffix = suffix
+    return n
+  }
+
+  function buildPanel(data) {
+    const now = data.now
+
+    // textContent only, all of it: tasks and commands come from the session.
+    const sect = (title, ...kids2) => {
+      const s2 = h('section', 'p-sec')
+      s2.append(h('h3', '', title), ...kids2)
+      return s2
+    }
+    const person = ([id, name, shown]) => {
+      const b = h('button', `p-person ${shown}`)
+      b.type = 'button'
+      if (id) b.dataset.id = id
+      else b.disabled = true
+      b.append(h('span', 'dot'), h('span', 'nm', name), h('span', 'st', shown))
+      return b
+    }
+    const head = h('header', 'p-head')
+    const title = h('div', 'p-title')
+    title.append(h('h2', '', data.name), h('div', 'p-sub', `${data.type} · ${data.model} · ${data.room}`))
+    const close = h('button', 'p-close')
+    close.type = 'button'
+    close.dataset.close = '1'
+    close.setAttribute('aria-label', 'Close the panel')
+    close.append(icon('fail'))
+    head.append(title, close)
+
+    const pill = h('div', `p-pill ${data.shown}`)
+    pill.append(h('span', 'dot'), `${data.shown} · `, ticking('', data.since[0], data.since[1]))
+    const nowBox = h('div', `p-now ${data.shown}`)
+    const nowHead = h('div', 'p-now-head')
+    nowHead.append(icon(now.icon), now.head)
+    nowBox.append(nowHead)
+    if (now.sub) nowBox.append(h('div', now.isCode ? 'p-now-sub code' : 'p-now-sub', now.sub))
+    if (data.away) nowBox.append(h('div', 'p-away', `Away from the desk: ${data.away}`))
+
+    const parts = [head, pill, sect('Now', nowBox)]
+    if (data.task) parts.push(sect('Task', h('p', 'p-task', data.task)))
+    const list = h('ol', 'p-steps')
+    for (const [tool, what, when] of data.steps) {
+      const li = h('li', '')
+      const top = h('div', 'p-step-top')
+      top.append(icon(iconFor(tool)), h('b', '', tool.replace(/^mcp__/, '')), ticking('when', when, null, ' ago'))
+      li.append(top)
+      if (what) li.append(h('code', '', what))
+      list.append(li)
+    }
+    parts.push(sect('Recent tool calls', data.steps.length ? list : h('p', 'p-none', 'None yet.')))
+    const team = h('div', 'p-team')
+    if (data.parent) team.append(h('div', 'p-k', 'Reports to'), person(data.parent))
+    if (data.kids.length) team.append(h('div', 'p-k', `Its helpers (${data.kids.length})`), ...data.kids.map(person))
+    if (data.parent || data.kids.length) parts.push(sect('Team', team))
+    const grid = h('dl', 'p-cost')
+    for (const [k, v] of [['input', data.cost[0]], ['output', data.cost[1]], ['cache read', data.cost[2]], ['cache written', data.cost[3]], ['weighted', data.cost[4]], ['tool calls', data.cost[5]]]) {
+      grid.append(h('dt', '', k), h('dd', '', v))
+    }
+    parts.push(sect('Cost', grid))
+    panelBody.replaceChildren(...parts)
+  }
+
+  // One listener for the panel: its content is rebuilt as the agent changes.
+  panel.addEventListener('click', e => {
+    if (e.target.closest('[data-close]')) return follow(null)
+    const to = e.target.closest('[data-id]')
+    if (to) follow(to.dataset.id)
+  })
+
   // The agent under the pointer: of the boxes it is in, the one whose centre is nearest.
   function hitAt(x, y) {
     let best = null
@@ -1004,7 +1303,7 @@
     canvas.classList.remove('dragging')
     if (wasDrag) return
     const id = hitAt(e.clientX, e.clientY)
-    pinned = id && id !== pinned ? id : null
+    follow(id && id !== pinned ? id : null)
   })
   canvas.addEventListener('pointerleave', () => {
     if (drag) return
@@ -1024,7 +1323,10 @@
     zoom = 1
   })
   window.addEventListener('keydown', e => {
-    if (e.key === 'Escape') pinned = hovered = null
+    if (e.key === 'Escape') {
+      follow(null)
+      hovered = null
+    }
   })
 
   // ---- start ---------------------------------------------------------------
@@ -1052,6 +1354,9 @@
     trips: [...actors.values()].filter(a => a.legs.length).map(a => ({ id: a.agent.id, kind: a.legs[0].kind, to: a.agent.parentId })),
     rooms: plan.rooms.filter(r => r.kind !== 'boss').map(r => ({ id: r.id, title: r.name, desks: r.members.length })),
     inbox: inboxCount.get('main') ?? 0,
+    // Whom the detail panel follows, if anyone.
+    panel: panel.hidden ? null : pinned,
+    theme: pal.isDark ? 'dark' : 'light',
     gl: Boolean(renderer),
     stats: hud.stats.dataset.text ?? '',
     status: hud.status.textContent,

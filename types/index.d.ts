@@ -10,6 +10,13 @@ export type Tokens = {
   cacheWrite: number
 }
 
+// One tool call, for the browser's detail panel: what it was, and on what.
+export type Step = {
+  tool: string
+  what: string | null
+  at: number
+}
+
 export type Agent = {
   id: string
   // null only for the main loop. A parent we never saw spawn keeps its id; the view
@@ -20,6 +27,10 @@ export type Agent = {
   status: Status
   isBackground: boolean
   tool: string | null
+  // What the running tool is working on: its command, file, pattern or URL, clipped.
+  what: string | null
+  // The last few tool calls, oldest first.
+  recent: Step[]
   toolCalls: number
   tokens: Tokens
   model: string | null

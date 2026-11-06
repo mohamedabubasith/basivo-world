@@ -9,7 +9,7 @@ const WEB_FILES = ['index.html', 'world.js', 'demo.js', 'three.min.js'] as const
 
 // Change the tag when World's fields change: it declines what an earlier version
 // stored, which outlives a reload.
-const world = atom({ plugin: 'basivo-world', key: 'world' } as const, W.emptyWorld(0), { shape: 'world-1' })
+const world = atom({ plugin: 'basivo-world', key: 'world' } as const, W.emptyWorld(0), { shape: 'world-2' })
 const browserDir = atom({ plugin: 'basivo-world', key: 'browserDir' } as const, null)
 const isPaneOpened = atom({ plugin: 'basivo-world', key: 'isPaneOpened' } as const, false)
 
@@ -210,7 +210,7 @@ export const register: Register = on => {
 
   on('tool.call', async ($, e, next) => {
     await ensure($, e.agentId)
-    await change($, (w, at) => W.toolStart(w, e.agentId, e.tool, at))
+    await change($, (w, at) => W.toolStart(w, e.agentId, e.tool, at, W.whatOf(e as unknown as Record<string, unknown>)))
     try {
       return await next(e)
     } finally {

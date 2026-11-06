@@ -1,7 +1,7 @@
 {
   "name": "basivo-world",
   "displayName": "Basivo World",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "See your Claude Code agents live: who spawned whom, at any depth, what each is doing and what it costs — in a pane, and as a 3D office in your browser.",
   "author": { "name": "Mohamed Abu Basith", "url": "https://basivo.in" },
   "homepage": "https://github.com/mohamedabubasith/basivo-world",
