@@ -677,37 +677,94 @@
     return { g, screen, papers, tray, chair }
   }
 
+  // A person, jointed like one: hips and knees, shoulders and elbows, a neck, hands
+  // and shoes. Every limb is a pivot group, so a pose is a few angles. The boss wears
+  // a dark suit, white shirt and a tie; the rest wear their team's colour.
   function makePerson(a) {
     const g = new THREE.Group()
     const t = hash(a.type)
     const p = hash(a.id)
     const isMain = a.id === 'main'
-    const shirt = mat(isMain ? pal.violet : SHIRTS[t % SHIRTS.length])
-    const skin = mat(SKINS[p % SKINS.length])
-    const hair = mat(HAIRS[(t >>> 5) % HAIRS.length])
-    const trousers = mat(pal.trousers)
-    const legGeo = geo('leg', () => new THREE.BoxGeometry(0.15, 0.72, 0.17).translate(0, -0.36, 0))
-    const armGeo = geo('arm', () => new THREE.CapsuleGeometry(0.065, 0.4, 4, 8).translate(0, -0.27, 0))
-    const legs = [-0.1, 0.1].map(x => {
-      const leg = mesh(legGeo, trousers, x, 0.74, 0, g)
-      return leg
-    })
-    mesh(geo('torso', () => new THREE.CapsuleGeometry(0.21, 0.36, 4, 12)), shirt, 0, 1.12, 0, g)
-    const arms = [-0.29, 0.29].map(x => mesh(armGeo, shirt, x, 1.38, 0, g))
-    const head = new THREE.Group()
-    head.position.y = 1.68
-    g.add(head)
-    mesh(geo('head', () => new THREE.SphereGeometry(0.19, 16, 12)), skin, 0, 0, 0, head)
-    mesh(geo('hair', () => new THREE.SphereGeometry(0.2, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2.1)), hair, 0, 0.02, -0.02, head)
-    for (const x of [-0.07, 0.07]) mesh(geo('eye', () => new THREE.SphereGeometry(0.025, 6, 6)), mat('#111111'), x, 0.01, 0.17, head)
-    if (isMain) {
-      mesh(geo('crown', () => new THREE.CylinderGeometry(0.15, 0.17, 0.12, 8, 1, true)), mat(pal.gold, { metalness: 0.5, roughness: 0.4, side: THREE.DoubleSide }), 0, 0.2, 0, head)
+    const suit = pal.isDark ? '#262c3d' : '#2c3446'
+    const top = mat(isMain ? suit : SHIRTS[t % SHIRTS.length], { roughness: 0.9 })
+    const skin = mat(SKINS[p % SKINS.length], { roughness: 0.6 })
+    const hairM = mat(HAIRS[(p >>> 4) % HAIRS.length], { roughness: 0.7 })
+    const trousers = mat(isMain ? suit : pal.trousers, { roughness: 0.9 })
+    const shoe = mat(isMain ? '#0d0f14' : '#2a2320', { roughness: 0.35, metalness: 0.1 })
+    const cap = (r, len) => geo(`cap${r},${len}`, () => new THREE.CapsuleGeometry(r, len, 4, 10).translate(0, -len / 2 - r * 0.4, 0))
+    const ball = r => geo(`ball${r}`, () => new THREE.SphereGeometry(r, 14, 10))
+
+    // Legs: a hip pivot, the thigh, a knee pivot, the shin and a shoe.
+    const legs = []
+    const knees = []
+    for (const x of [-0.1, 0.1]) {
+      const hip = new THREE.Group()
+      hip.position.set(x, 0.92, 0)
+      g.add(hip)
+      mesh(cap(0.08, 0.3), trousers, 0, 0, 0, hip)
+      const knee = new THREE.Group()
+      knee.position.y = -0.44
+      hip.add(knee)
+      mesh(cap(0.066, 0.3), trousers, 0, 0, 0, knee)
+      mesh(box(0.12, 0.08, 0.25), shoe, 0, -0.43, 0.05, knee)
+      legs.push(hip)
+      knees.push(knee)
     }
+    mesh(box(0.36, 0.18, 0.21), trousers, 0, 0.95, 0, g)
+    // The torso, a little flat front to back, and the neck.
+    const torso = mesh(geo('torso2', () => new THREE.CapsuleGeometry(0.19, 0.3, 4, 14)), top, 0, 1.22, 0, g)
+    torso.scale.set(1.05, 1, 0.74)
+    mesh(geo('neck', () => new THREE.CylinderGeometry(0.06, 0.07, 0.12, 10)), skin, 0, 1.55, 0, g)
+    if (isMain) {
+      // Shirt and tie down the front of the jacket, and the lapels either side.
+      mesh(box(0.13, 0.3, 0.02), mat('#f4f5f7'), 0, 1.33, 0.135, g)
+      mesh(box(0.045, 0.27, 0.025), mat(pal.violet, { roughness: 0.5 }), 0, 1.3, 0.148, g)
+      mesh(box(0.06, 0.06, 0.03), mat(pal.violet, { roughness: 0.5 }), 0, 1.45, 0.148, g)
+      for (const sx of [-1, 1]) {
+        const lapel = mesh(box(0.07, 0.3, 0.02), mat(pal.isDark ? '#1b2030' : '#222a3a'), sx * 0.085, 1.33, 0.142, g)
+        lapel.rotation.z = sx * 0.28
+      }
+      mesh(box(0.05, 0.05, 0.02), mat('#f4f5f7'), 0.12, 1.33, 0.14, g).rotation.z = 0.3
+    }
+    // Arms: a shoulder pivot, the upper arm, an elbow pivot, the forearm and a hand.
+    const arms = []
+    const elbows = []
+    for (const x of [-0.27, 0.27]) {
+      const shoulder = new THREE.Group()
+      shoulder.position.set(x, 1.43, 0)
+      g.add(shoulder)
+      mesh(cap(0.058, 0.2), top, 0, 0, 0, shoulder)
+      const elbow = new THREE.Group()
+      elbow.position.y = -0.29
+      shoulder.add(elbow)
+      mesh(cap(0.05, 0.19), top, 0, 0, 0, elbow)
+      if (isMain) mesh(geo('cuff', () => new THREE.CylinderGeometry(0.052, 0.052, 0.04, 10)), mat('#f4f5f7'), 0, -0.25, 0, elbow)
+      mesh(ball(0.052), skin, 0, -0.29, 0, elbow)
+      arms.push(shoulder)
+      elbows.push(elbow)
+    }
+    // The head: a face with eyes, brows, a nose and ears, and one of a few haircuts.
+    const head = new THREE.Group()
+    head.position.y = 1.74
+    g.add(head)
+    mesh(ball(0.16), skin, 0, 0, 0, head).scale.set(0.95, 1.1, 1)
+    for (const x of [-0.055, 0.055]) {
+      mesh(ball(0.021), mat('#1a1a1f'), x, 0.02, 0.145, head)
+      mesh(box(0.06, 0.013, 0.012), hairM, x, 0.075, 0.148, head)
+    }
+    mesh(ball(0.026), skin, 0, -0.02, 0.162, head)
+    for (const x of [-0.152, 0.152]) mesh(ball(0.034), skin, x, 0, 0, head).scale.set(0.5, 1, 0.8)
+    mesh(box(0.06, 0.012, 0.01), mat('#9a4f4f'), 0, -0.075, 0.148, head)
+    const style = (p >>> 9) % 4
+    mesh(geo('hairCap', () => new THREE.SphereGeometry(0.168, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2.05)), hairM, 0, 0.03, -0.012, head).scale.set(1, style === 3 ? 0.8 : 1.05, 1.02)
+    if (style === 1) mesh(box(0.3, 0.3, 0.08), hairM, 0, -0.06, -0.12, head) // long, to the shoulders
+    if (style === 2) mesh(ball(0.075), hairM, 0, 0.1, -0.16, head) // a bun
+    if (style === 0) mesh(box(0.26, 0.06, 0.08), hairM, 0, 0.11, 0.1, head).rotation.x = 0.4 // a fringe
     // The paper it carries: its brief going in, its report coming back.
-    const paper = mesh(box(0.24, 0.02, 0.3), mat(pal.paper), 0, 1.12, 0.3, g)
+    const paper = mesh(box(0.24, 0.02, 0.3), mat(pal.paper), 0, 1.05, 0.38, g)
     paper.rotation.x = -0.35
     paper.visible = false
-    return { g, legs, arms, head, paper }
+    return { g, legs, knees, arms, elbows, head, paper }
   }
 
   function rebuildActor(actor) {
@@ -884,30 +941,45 @@
     const P = person
     const isCarrying = Boolean(trip && CARRY.has(trip.kind))
     P.paper.visible = isCarrying
+    const pose = (hips, knees, shoulders, elbows) => {
+      P.legs[0].rotation.x = hips[0]
+      P.legs[1].rotation.x = hips[1]
+      P.knees[0].rotation.x = knees[0]
+      P.knees[1].rotation.x = knees[1]
+      P.arms[0].rotation.x = shoulders[0]
+      P.arms[1].rotation.x = shoulders[1]
+      P.elbows[0].rotation.x = elbows[0]
+      P.elbows[1].rotation.x = elbows[1]
+    }
     if (trip) {
-      // Out of the chair: walking, or standing at the manager's desk.
+      // On their feet: walking, or standing at a desk, the coffee or a colleague.
       P.g.position.set(trip.x, 0, trip.z)
       P.g.rotation.y = trip.face
-      const swing = trip.moving ? Math.sin(t * 11) * 0.6 : 0
-      P.legs[0].rotation.x = swing
-      P.legs[1].rotation.x = -swing
-      // A paper is carried in both hands; otherwise the arms swing, or one lifts a cup.
-      const sip = trip.kind === 'coffee' && !trip.moving ? -1.6 - Math.max(0, Math.sin(t * 1.3)) * 0.5 : null
-      P.arms[0].rotation.x = isCarrying ? -0.9 : -swing * 0.8
-      P.arms[1].rotation.x = isCarrying ? -0.9 : (sip ?? swing * 0.8)
-      P.g.position.y = trip.moving ? Math.abs(Math.sin(t * 11)) * 0.05 : 0
-      P.head.rotation.x = 0
+      const c = trip.moving ? Math.sin(t * 9) : 0
+      // A step: the leg going back bends at the knee; the arms swing against the legs.
+      const hips = [c * 0.45, -c * 0.45]
+      const knees = [Math.max(0, -c) * 0.7, Math.max(0, c) * 0.7]
+      const sip = trip.kind === 'coffee' && !trip.moving ? Math.max(0, Math.sin(t * 1.3)) : 0
+      const shoulders = isCarrying ? [-0.45, -0.45] : [-c * 0.4, sip ? -0.35 - sip * 0.25 : c * 0.4]
+      const elbows = isCarrying ? [-1.05, -1.05] : [-0.25, sip ? -1.7 - sip * 0.6 : -0.25]
+      if (trip.kind === 'chat' && !trip.moving) shoulders[0] = -0.3 + Math.sin(t * 2.4) * 0.15 // talking with a hand
+      pose(hips, knees, shoulders, elbows)
+      P.g.position.y = trip.moving ? Math.abs(Math.cos(t * 9)) * 0.035 : 0
+      P.head.rotation.x = sip ? -0.15 * sip : 0
+      P.head.rotation.y = trip.kind === 'chat' && !trip.moving ? Math.sin(t * 0.9) * 0.15 : 0
     } else {
-      // In the chair: legs under the desk, arms on the keyboard while working.
+      // In the chair: thighs on the seat, shins down, hands on the keyboard while working.
       const chairZ = desk.g.position.z + (seat.chairZ - seat.deskZ)
-      P.g.position.set(desk.g.position.x, -0.26, chairZ)
+      P.g.position.set(desk.g.position.x, -0.32, chairZ)
       P.g.rotation.y = seat.facing
-      P.legs[0].rotation.x = P.legs[1].rotation.x = -Math.PI / 2
-      const typing = isWorking ? Math.sin(t * 18) * 0.08 : 0
-      const reach = isWorking ? -1.15 : a.shown === 'waiting' ? -0.2 : -0.5
-      P.arms[0].rotation.x = reach + typing
-      P.arms[1].rotation.x = reach - typing
-      P.head.rotation.x = a.shown === 'waiting' ? -0.25 + Math.sin(t * 1.5) * 0.05 : isWorking ? 0.12 + Math.sin(t * 3) * 0.03 : 0
+      const typing = isWorking ? Math.sin(t * 16) * 0.07 : 0
+      const sitHips = [-Math.PI / 2, -Math.PI / 2]
+      const sitKnees = [Math.PI / 2, Math.PI / 2]
+      if (isWorking) pose(sitHips, sitKnees, [-0.55 + typing, -0.55 - typing], [-1.05, -1.05])
+      else if (a.shown === 'waiting') pose(sitHips, sitKnees, [-0.15, -0.6], [-0.5, -1.9]) // chin on a hand
+      else pose(sitHips, sitKnees, [-0.2, -0.2], [-0.9, -0.9]) // hands in the lap
+      P.head.rotation.x = a.shown === 'waiting' ? -0.2 + Math.sin(t * 1.5) * 0.04 : isWorking ? 0.1 + Math.sin(t * 3) * 0.03 : 0
+      P.head.rotation.y = 0
     }
 
     // Labels: a name tag at the desk, a bubble over whoever is there.
@@ -1161,7 +1233,6 @@
     const kids = view?.agents.filter(k => k.parentId === a.id) ?? []
     const now = nowLine(a, wall)
     const away = actor.legs[0]?.kind
-    const steps = (a.recent ?? []).slice().reverse()
     const data = {
       name: a.id === 'main' ? 'Boss' : nameOf(a),
       type: a.id === 'main' ? 'main session' : a.type,
@@ -1171,7 +1242,6 @@
       now,
       away: away === 'coffee' ? 'at the coffee corner' : away === 'chat' ? 'talking to a colleague' : away === 'stroll' ? 'stretching their legs' : away === 'brief' ? 'taking the brief' : away === 'report' ? 'handing in the report' : '',
       task: a.id === 'main' ? '' : a.label,
-      steps: steps.map(st => [st.tool, st.what ?? '', st.at]),
       parent: parent ? [parent.id, nameOf(parent), parent.shown] : a.isOrphan ? ['', 'not seen', ''] : null,
       kids: kids.map(k => [k.id, nameOf(k), k.shown]),
       cost: [fmt(a.tokens.input), fmt(a.tokens.output), fmt(a.tokens.cacheRead), fmt(a.tokens.cacheWrite), fmt(a.weight), String(a.toolCalls)],
@@ -1184,6 +1254,8 @@
       panel.dataset.key = key
       buildPanel(data)
     }
+    const box = panelBody.querySelector('.p-feed')
+    if (box) renderFeed(box, feedOf(a))
     for (const n of panelBody.querySelectorAll('[data-at]')) {
       const text = n.dataset.end ? ago(Number(n.dataset.end) - Number(n.dataset.at)) : `${ago(wall - Number(n.dataset.at))}${n.dataset.suffix ?? ''}`
       if (n.textContent !== text) n.textContent = text
@@ -1236,16 +1308,11 @@
 
     const parts = [head, pill, sect('Now', nowBox)]
     if (data.task) parts.push(sect('Task', h('p', 'p-task', data.task)))
-    const list = h('ol', 'p-steps')
-    for (const [tool, what, when] of data.steps) {
-      const li = h('li', '')
-      const top = h('div', 'p-step-top')
-      top.append(icon(iconFor(tool)), h('b', '', tool.replace(/^mcp__/, '')), ticking('when', when, null, ' ago'))
-      li.append(top)
-      if (what) li.append(h('code', '', what))
-      list.append(li)
-    }
-    parts.push(sect('Recent tool calls', data.steps.length ? list : h('p', 'p-none', 'None yet.')))
+    // The live activity: filled by renderFeed, line by line, so it never jumps.
+    const feedBox = h('div', 'p-feed')
+    feedBox.setAttribute('role', 'log')
+    feedBox.setAttribute('aria-live', 'off')
+    parts.push(sect('Live activity', feedBox))
     const team = h('div', 'p-team')
     if (data.parent) team.append(h('div', 'p-k', 'Reports to'), person(data.parent))
     if (data.kids.length) team.append(h('div', 'p-k', `Its helpers (${data.kids.length})`), ...data.kids.map(person))
@@ -1256,6 +1323,70 @@
     }
     parts.push(sect('Cost', grid))
     panelBody.replaceChildren(...parts)
+  }
+
+  // An agent's activity, as Claude Code shows it. A state file from before the feed
+  // existed has only the recent tool calls: those are shown, without results.
+  function feedOf(a) {
+    if (a.feed?.length) return a.feed
+    return (a.recent ?? []).map((st, i) => ({ id: `r${i}:${st.at}`, kind: 'tool', tool: st.tool, text: st.what ?? '', at: st.at, live: false }))
+  }
+
+  // Lines are kept by id and only their changed words are rewritten, so a thought
+  // that streams in grows in place. The box follows the newest line unless you have
+  // scrolled up to read an older one.
+  function renderFeed(box, items) {
+    const nodes = (box._nodes ??= new Map())
+    const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 40
+    const keep = new Set()
+    items.forEach((it, i) => {
+      keep.add(it.id)
+      let n = nodes.get(it.id)
+      if (!n) {
+        n = h('div', `f ${it.kind}`)
+        nodes.set(it.id, n)
+      }
+      const sig = `${it.text}|${it.result ?? ''}|${it.live}|${it.isError}`
+      if (n.dataset.sig !== sig) {
+        n.dataset.sig = sig
+        fillLine(n, it)
+      }
+      if (box.children[i] !== n) box.insertBefore(n, box.children[i] ?? null)
+    })
+    for (const [id, n] of nodes) {
+      if (keep.has(id)) continue
+      n.remove()
+      nodes.delete(id)
+    }
+    if (!items.length && !box.firstChild) box.append(h('p', 'p-none', 'Nothing yet.'))
+    else if (items.length) box.querySelector(':scope > .p-none')?.remove()
+    if (stick) box.scrollTop = box.scrollHeight
+  }
+
+  // One line, in Claude Code's own marks: > the prompt, ✻ a thought, ⏺ a tool call or
+  // what the agent wrote, and ⎿ a tool's result under its call.
+  function fillLine(n, it) {
+    n.className = `f ${it.kind}${it.live ? ' live' : ''}${it.isError ? ' error' : ''}`
+    const mark = { prompt: '>', thinking: '✻', text: '⏺', tool: '⏺' }[it.kind] ?? '·'
+    const top = h('div', 'f-top')
+    top.append(h('span', 'f-mark', mark))
+    if (it.kind === 'tool') {
+      const call = h('span', 'f-call')
+      call.append(h('b', '', (it.tool ?? '').replace(/^mcp__/, '')), it.text ? `(${it.text})` : '')
+      top.append(call)
+    } else if (it.kind === 'thinking') {
+      top.append(h('span', 'f-label', it.live ? 'Thinking…' : 'Thought'))
+    } else {
+      top.append(h('span', 'f-body', it.text))
+    }
+    const parts = [top]
+    if (it.kind === 'thinking' && it.text) parts.push(h('div', 'f-thought', it.text))
+    if (it.kind === 'tool') {
+      const res = h('div', 'f-result')
+      res.append(h('span', 'f-elbow', '⎿'), h('span', 'f-out', it.live ? 'Running…' : it.result || (it.isError ? 'Failed' : '(no output)')))
+      parts.push(res)
+    }
+    n.replaceChildren(...parts)
   }
 
   // One listener for the panel: its content is rebuilt as the agent changes.

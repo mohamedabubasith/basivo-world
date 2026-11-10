@@ -125,13 +125,13 @@
 
   /* The detail panel: whoever you clicked, followed live. */
   #panel {
-    position: fixed; top: 0; right: 0; bottom: 0; z-index: 5; width: min(360px, 100vw); overflow-y: auto;
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 5; width: min(440px, 100vw); overflow-y: auto;
     background: var(--card); border-left: 1px solid var(--border); box-shadow: var(--shadow); backdrop-filter: blur(10px);
     font-size: 12.5px; color: var(--muted);
   }
   #panel-body { padding: 18px 18px 28px; display: grid; gap: 16px; }
-  body.panel-open #hud { right: 360px; }
-  body.panel-open #legend { right: 382px; }
+  body.panel-open #hud { right: 440px; }
+  body.panel-open #legend { right: 462px; }
   .p-head { display: flex; align-items: flex-start; gap: 10px; }
   .p-title { flex: 1; min-width: 0; }
   .p-title h2 { margin: 0; font-size: 17px; font-weight: 650; color: var(--fg); letter-spacing: -0.01em; overflow-wrap: anywhere; }
@@ -168,6 +168,27 @@
   .p-step-top b { color: var(--fg); font-weight: 600; }
   .p-step-top .when { margin-left: auto; font-size: 11px; white-space: nowrap; }
   .p-steps code { font-family: var(--mono); font-size: 11.5px; color: var(--fg); overflow-wrap: anywhere; }
+  /* Live activity, in Claude Code's own marks. */
+  .p-feed {
+    max-height: 46vh; overflow-y: auto; display: grid; gap: 10px; padding: 12px; border-radius: 10px;
+    border: 1px solid var(--border); font-family: var(--mono); font-size: 12px; line-height: 1.5; color: var(--fg);
+    overscroll-behavior: contain;
+  }
+  .f { display: grid; gap: 2px; min-width: 0; }
+  .f-top { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .f-mark { flex: none; width: 12px; text-align: center; color: var(--muted); }
+  .f.tool .f-mark, .f.text .f-mark { color: var(--ok); }
+  .f.tool.error .f-mark { color: var(--bad); }
+  .f.tool.live .f-mark, .f.thinking.live .f-mark { color: var(--warn); animation: beat 1s ease-in-out infinite; }
+  .f.prompt { color: var(--muted); }
+  .f-call, .f-body { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .f-call b { font-weight: 650; }
+  .f-label { color: var(--muted); font-style: italic; }
+  .f-thought { margin-left: 20px; color: var(--muted); font-style: italic; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .f-result { display: flex; gap: 8px; margin-left: 8px; color: var(--muted); min-width: 0; }
+  .f-elbow { flex: none; }
+  .f-out { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 7.5em; overflow: hidden; }
+  .f.error .f-out { color: var(--bad); }
   .p-team { display: grid; gap: 4px; }
   .p-k { font-size: 11.5px; margin-top: 4px; }
   .p-person {
@@ -216,6 +237,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     #status[data-mode="live"]::before { animation: none; }
+    .f.live .f-mark { animation: none; }
     #theme svg, body, .stat, .tag, .bubble, .sign, #panel, #tip { transition: none; }
   }
 </style>

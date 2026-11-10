@@ -32,6 +32,27 @@ const Demo = (() => {
     Explore: { Glob: 'test/fixtures/**', Grep: 'orderFixture', Read: 'test/fixtures/orders.json' },
     linter: { Bash: 'npx tsc --noEmit' },
   }
+  // What an agent thinks before each tool, and what the tool hands back.
+  const THINK = {
+    Read: 'Let me read {what} to see how it works.',
+    Grep: 'I need every place {what} is used.',
+    Glob: 'First, which files match {what}?',
+    Bash: 'Run {what} and check the output.',
+    Edit: 'The change belongs in {what}. Writing it now.',
+    WebFetch: 'Checking the reference at {what}.',
+    Agent: 'This needs its own helper: "{what}".',
+  }
+  const RESULT = {
+    Read: 'Read 142 lines',
+    Grep: 'Found 3 matches in 2 files',
+    Glob: 'Found 18 files',
+    Edit: 'Updated with 1 addition and 1 removal',
+    WebFetch: 'Received 18.2KB (200 OK)',
+    Agent: 'Report received.',
+    'npm test -- orders': '✓ orders.test.ts (12 tests)\nTests  12 passed',
+    'npx tsc --noEmit': "error TS2345: Argument of type 'string' is not assignable to parameter of type 'OrderId'.",
+    'git ls-files | wc -l': '412',
+  }
   // Tokens a second of work: fresh input, output, cache read.
   const RATE = {
     main: [40, 90, 9_000],
@@ -70,6 +91,25 @@ const Demo = (() => {
         recent.push({ tool, what: WHAT[type][tool] ?? null, at: epoch + Math.max(from, k * 1_100 - shift) })
       }
       const tool = isOver ? null : tools[step % tools.length]
+      // The live activity, as the mod records it: the prompt, then per step a thought
+      // and a tool call with its result. The step under way streams: its thought grows,
+      // then its tool runs with no result yet.
+      const feed = [{ id: `${id}:p`, kind: 'prompt', text: label, at: epoch + from, live: false }]
+      for (let k = Math.max(first, last - 9); k <= last; k += 1) {
+        const kt = tools[k % tools.length]
+        const what = WHAT[type][kt] ?? ''
+        const t0 = epoch + Math.max(from, k * 1_100 - shift)
+        const into = !isOver && k === step ? t + shift - k * 1_100 : 1_100
+        const thought = THINK[kt].replace('{what}', what)
+        feed.push({ id: `${id}:${k}:th`, kind: 'thinking', text: thought.slice(0, Math.ceil(thought.length * Math.min(1, into / 500))), at: t0, live: into < 500 })
+        if (into < 500) continue
+        const result = into < 1_100 ? undefined : (RESULT[what] ?? RESULT[kt])
+        feed.push({ id: `${id}:${k}:t`, kind: 'tool', tool: kt, text: what, result, isError: /^error/.test(result ?? ''), at: t0 + 500, live: result === undefined })
+      }
+      if (isOver && ending !== 'idle') {
+        const said = ending === 'failed' ? 'The type checker failed on orders.ts. Handing in what I found.' : `Done: ${label}. Report attached.`
+        feed.push({ id: `${id}:end`, kind: 'text', text: said, at: epoch + to, live: false })
+      }
       return {
         id,
         parentId,
@@ -80,6 +120,7 @@ const Demo = (() => {
         tool,
         what: tool ? (WHAT[type][tool] ?? null) : null,
         recent,
+        feed,
         toolCalls: Math.floor(worked / 1.1),
         tokens,
         model: type === 'main' ? 'opus' : type === 'Explore' || type === 'indexer' ? 'haiku' : 'sonnet',

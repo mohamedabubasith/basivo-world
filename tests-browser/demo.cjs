@@ -18,6 +18,8 @@ async function open(browser, { width, height, scheme }) {
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
   page.on('pageerror', e => errors.push(String(e)))
   await page.clock.install({ time: base })
+  // Frozen: the page's time moves only when a check moves it, however slow the machine.
+  await page.clock.pauseAt(base + 50)
   await page.goto(PAGE)
   return { ctx, page, errors }
 }
@@ -70,7 +72,15 @@ async function at(page, ms) {
   const card = await page.locator('#panel').innerText()
   check(/tester/.test(card) && /write the missing tests/.test(card), 'the panel names the agent and its task')
   check(/now/i.test(card) && /(Read|Edit|Bash|Thinking)/.test(card) && /(orders|npm test)/.test(card), `the panel says what it is running, and on what: ${JSON.stringify(card.slice(0, 160))}`)
-  check(/recent tool calls/i.test(card) && /ago/.test(card), 'the panel lists its recent tool calls')
+  check(/live activity/i.test(card), 'the panel has a live activity feed')
+  const feed = await page.locator('#panel .p-feed').innerText()
+  check(/^>\s*write the missing tests/.test(feed), `the feed starts with the prompt it was given: ${JSON.stringify(feed.slice(0, 60))}`)
+  check(/✻\s*(Thinking…|Thought)/.test(feed) && /Let me read|Run npm test|The change belongs/.test(feed), 'the feed shows its thinking, word for word')
+  check(/⏺\s*Bash\(npm test -- orders\)/.test(feed) && /⎿\s*✓ orders.test.ts/.test(feed), 'the feed shows each tool call and its result, as Claude Code does')
+  // It streams: a moment later the thought or the tool has moved on, in place.
+  const before = feed
+  await page.clock.runFor(400)
+  check((await page.locator('#panel .p-feed').innerText()) !== before, 'the feed moves while the agent works')
   check(/Reports to/.test(card) && /review the change for issue #42/.test(card), 'the panel names its manager')
   check(!(await page.locator('#tip').isVisible()), 'no tooltip over the agent the panel already shows')
   const panelBox = await page.locator('#panel').boundingBox()

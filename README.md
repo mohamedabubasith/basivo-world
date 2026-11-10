@@ -45,7 +45,7 @@ crew, and says so in the corner — demo data is never shown as live.
 
 | What you see | What it means |
 | :- | :- |
-| **The glass cabin** | The boss: main, your session, at the big desk with the bookshelf. Violet shirt and a crown. |
+| **The glass cabin** | The boss: main, your session, at the big desk with the bookshelf, in a dark suit, white shirt and violet tie. |
 | **A room** | A department: one manager's helpers, one desk each. The sign says whose: "Main office" reports straight to the boss, "Reviewer team" to the reviewer. |
 | A person at a desk | One agent. Same shirt colour for the same agent type, so you learn to spot the reviewer. |
 | **Screen on, typing**, tool in the bubble | Working, and on what: search, edit, shell, web, a helper, an MCP tool. |
@@ -62,10 +62,11 @@ Drag to turn the building, scroll to zoom, double-click to reset. The sun/moon b
 in the corner switches day and night, and the page remembers your choice; until you
 choose, it follows your system.
 
-**Click anyone** and a panel opens on the right and follows them live: what they are
-running now and on what (the command, file, pattern or URL), their last eight tool calls,
-their task, who they report to, the helpers they spawned (click one to follow it), and
-their tokens split into input, output, cache read and cache written. Escape closes it.
+**Click anyone** and a panel opens on the right and follows them live, the way Claude
+Code shows its own work: the prompt they were given (`>`), their thinking as it streams
+(`✻`), what they write and each tool call (`⏺ Bash(npm test)`), and each tool's result
+under it (`⎿`). Above the feed: what they are doing right now; below it, who they report
+to, the helpers they spawned (click one to follow it), and their tokens. Escape closes it.
 Hover for a quick card.
 
 ![Clicking the tester: the panel shows what it runs now, its recent tool calls, its manager and helpers](docs/world-detail.png)
@@ -105,10 +106,10 @@ Only after you run `/world`, and only on your machine:
   state.js                                      the agent tree, rewritten as it changes
 ```
 
-`state.js` holds agent types, **the task each helper was given**, tool names, **what each
-recent tool call worked on** (a command, file path, search pattern or URL, clipped to 140
-characters, with values after words like `token`, `key` or `password` blanked), models
-and token counts. Task descriptions can contain whatever you asked Claude to do, so treat the
+`state.js` holds agent types, **the task each helper was given**, tool names, **each agent's
+recent activity**: the prompt it was given, its thinking and writing, its tool calls and
+their results (the last 30 lines per agent, each clipped, with values after words like
+`token`, `key` or `password` blanked), models and token counts. Task descriptions can contain whatever you asked Claude to do, so treat the
 folder as you would your session transcripts. Nothing is sent anywhere. Delete the folder
 whenever you like.
 

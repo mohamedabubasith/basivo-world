@@ -4,9 +4,9 @@
 
 export const MAIN = 'main'
 
-import type { Agent, Status, Step, Tokens, World } from '../types'
+import type { Agent, FeedItem, Status, Step, Tokens, World } from '../types'
 
-export type { Agent, Status, Step, Tokens, World }
+export type { Agent, FeedItem, Status, Step, Tokens, World }
 
 // The usage fields every model request reports.
 export type Usage = {
@@ -52,6 +52,7 @@ export function emptyWorld(at: number): World {
         tool: null,
         what: null,
         recent: [],
+        feed: [],
         toolCalls: 0,
         tokens: zero(),
         model: null,
@@ -97,6 +98,7 @@ export function spawn(
     tool: existing?.tool ?? null,
     what: existing?.what ?? null,
     recent: existing?.recent ?? [],
+    feed: existing?.feed ?? [],
     toolCalls: existing?.toolCalls ?? 0,
     tokens: existing?.tokens ?? zero(),
     model: s.model ?? existing?.model ?? null,
@@ -118,6 +120,40 @@ export function turnStart(w: World, agentId: string | undefined, at: number): Wo
 
 // How many tool calls each agent remembers for the detail panel.
 export const RECENT = 8
+// Values after words like token, key or password are blanked in everything written to
+// disk: the state file is a plain file beside the page.
+export function redact(text: string): string {
+  return text.replace(/\b(bearer|token|api[_-]?key|secret|password|passwd)(["']?\s*[:=]?\s*)("[^"]*"|'[^']*'|[^\s"']+)/gi, '$1$2•••')
+}
+
+// The live feed: how many lines an agent keeps (a finished one keeps fewer), and how
+// much of each. ponytail: a fixed cap per agent; a session of a hundred busy agents
+// writes a few MB a flush, page the feed per agent if that ever matters.
+export const FEED = 30
+export const FEED_DONE = 12
+export const TEXT_CLIP = 1500
+export const RESULT_CLIP = 500
+
+// The end of a long text, where the newest words are: a live thought reads from its tail.
+export function tail(text: string, n: number): string {
+  const t = redact(text.trim())
+  return t.length > n ? `…${t.slice(t.length - n + 1)}` : t
+}
+export function head(text: string, n: number): string {
+  const t = redact(text.trim())
+  return t.length > n ? `${t.slice(0, n - 1)}…` : t
+}
+
+// Adds a line to an agent's feed, or updates the line with the same id in place.
+export function feedPut(w: World, agentId: string | undefined, item: FeedItem, at: number): World {
+  return patch(w, loopOf(agentId), at, a => {
+    const feed = a.feed ?? []
+    const i = feed.findIndex(f => f.id === item.id)
+    const next = i < 0 ? [...feed, { ...item, at }] : feed.map((f, k) => (k === i ? { ...f, ...item, at: f.at } : f))
+    return { ...a, feed: next.slice(-FEED), lastAt: at }
+  })
+}
+
 // The arguments that say what a call is about, in the order they are looked for.
 const ARG_KEYS = ['command', 'file_path', 'notebook_path', 'pattern', 'url', 'query', 'description', 'path', 'prompt'] as const
 const CLIP = 140
@@ -129,10 +165,7 @@ export function whatOf(args: Record<string, unknown>): string | null {
   for (const k of ARG_KEYS) {
     const v = args[k]
     if (typeof v !== 'string' || !v.trim()) continue
-    const line = v
-      .replace(/\s+/g, ' ')
-      .trim()
-      .replace(/\b(bearer|token|api[_-]?key|secret|password|passwd)(["']?\s*[:=]?\s*)("[^"]*"|'[^']*'|[^\s"']+)/gi, '$1$2•••')
+    const line = redact(v.replace(/\s+/g, ' ').trim())
     return line.length > CLIP ? `${line.slice(0, CLIP - 1)}…` : line
   }
   return null
@@ -181,9 +214,19 @@ export function addUsage(
 export function complete(w: World, agentId: string | undefined, reason: TurnEnd, at: number): World {
   const id = loopOf(agentId)
   // The main loop does not finish: it waits for the next prompt.
-  if (id === MAIN) return patch(w, id, at, a => ({ ...a, status: 'idle', tool: null, what: null, lastAt: at }))
+  if (id === MAIN) {
+    return patch(w, id, at, a => ({ ...a, status: 'idle', tool: null, what: null, feed: (a.feed ?? []).map(f => (f.live ? { ...f, live: false } : f)), lastAt: at }))
+  }
   const status: Status = reason === 'answer' ? 'done' : reason === 'aborted' ? 'stopped' : 'failed'
-  return patch(w, id, at, a => ({ ...a, status, tool: null, what: null, lastAt: at, endedAt: at }))
+  return patch(w, id, at, a => ({
+    ...a,
+    status,
+    tool: null,
+    what: null,
+    feed: (a.feed ?? []).map(f => (f.live ? { ...f, live: false } : f)).slice(-FEED_DONE),
+    lastAt: at,
+    endedAt: at,
+  }))
 }
 
 const fromRoster: Record<RosterEntry['status'], Status> = {

@@ -9,7 +9,7 @@ const WEB_FILES = ['index.html', 'world.js', 'demo.js', 'three.min.js'] as const
 
 // Change the tag when World's fields change: it declines what an earlier version
 // stored, which outlives a reload.
-const world = atom({ plugin: 'basivo-world', key: 'world' } as const, W.emptyWorld(0), { shape: 'world-2' })
+const world = atom({ plugin: 'basivo-world', key: 'world' } as const, W.emptyWorld(0), { shape: 'world-3' })
 const browserDir = atom({ plugin: 'basivo-world', key: 'browserDir' } as const, null)
 const isPaneOpened = atom({ plugin: 'basivo-world', key: 'isPaneOpened' } as const, false)
 
@@ -65,6 +65,22 @@ function fileUrl(dir: string): string {
 // so their events are counted as unattributed without asking the roster each time.
 const forks = new Set<string>()
 let flush: { cancel: () => void } | null = null
+// Thinking and text as they stream, by feed line id: folded into the world at most
+// every 300ms, not once a chunk, so a fast stream costs a few writes a second.
+const streaming = new Map<string, { agentId: string | undefined; item: W.FeedItem }>()
+const dirty = new Set<string>()
+let streamFlush: { cancel: () => void } | null = null
+
+function flushStreams($: EngineInterface): Promise<void> {
+  streamFlush?.cancel()
+  streamFlush = null
+  const lines = [...dirty].flatMap(id => streaming.get(id) ?? [])
+  dirty.clear()
+  if (!lines.length) return Promise.resolve()
+  return change($, (w, at) =>
+    lines.reduce((acc, l) => W.feedPut(acc, l.agentId, { ...l.item, text: W.tail(l.item.text, W.TEXT_CLIP) }, at), w),
+  )
+}
 let poll: { cancel: () => void } | null = null
 
 async function publishState($: EngineInterface): Promise<void> {
@@ -204,22 +220,65 @@ export const register: Register = on => {
 
   on('turn.start', async ($, e, next) => {
     await ensure($, e.agentId)
-    await change($, (w, at) => W.turnStart(w, e.agentId, at))
+    await change($, (w, at) => {
+      const started = W.turnStart(w, e.agentId, at)
+      if (!e.text.trim()) return started
+      const item: W.FeedItem = { id: `p:${e.turnId}`, kind: 'prompt', text: W.head(e.text, W.TEXT_CLIP), at, live: false }
+      return W.feedPut(started, e.agentId, item, at)
+    })
     return next(e)
   })
 
   on('tool.call', async ($, e, next) => {
     await ensure($, e.agentId)
-    await change($, (w, at) => W.toolStart(w, e.agentId, e.tool, at, W.whatOf(e as unknown as Record<string, unknown>)))
+    const what = W.whatOf(e as unknown as Record<string, unknown>)
+    const id = `t:${e.tool_use_id}`
+    await change($, (w, at) =>
+      W.feedPut(W.toolStart(w, e.agentId, e.tool, at, what), e.agentId, { id, kind: 'tool', tool: e.tool, text: what ?? '', at, live: true }, at),
+    )
+    let answer: Awaited<ReturnType<typeof next>> | undefined
     try {
-      return await next(e)
+      answer = await next(e)
+      return answer
     } finally {
-      await change($, (w, at) => W.toolEnd(w, e.agentId, at))
+      const said = answer?.deny ?? (typeof answer?.text === 'string' ? answer.text : '')
+      const result = W.head(said, W.RESULT_CLIP)
+      const isError = Boolean(answer?.deny || answer?.isError) || answer === undefined
+      await change($, (w, at) =>
+        W.feedPut(W.toolEnd(w, e.agentId, at), e.agentId, { id, kind: 'tool', tool: e.tool, text: what ?? '', result, isError, at, live: false }, at),
+      )
     }
   })
 
   on('turn.step', async function* ($, e, next) {
-    const result = yield* next(e)
+    // Every chunk passes on untouched; thinking and text are copied into the feed.
+    const stream = next(e)
+    const mine: string[] = []
+    try {
+      for await (const chunk of stream) {
+        if (chunk.kind === 'thinking' || chunk.kind === 'text') {
+          const id = `s:${e.turnId}:${e.index}:${chunk.index}`
+          const line = streaming.get(id) ?? { agentId: e.agentId, item: { id, kind: chunk.kind, text: '', at: 0, live: true } }
+          if (!streaming.has(id)) mine.push(id)
+          // Only the tail is ever shown, so only twice that is kept while it streams.
+          line.item = { ...line.item, text: (line.item.text + chunk.text).slice(-W.TEXT_CLIP * 2) }
+          streaming.set(id, line)
+          dirty.add(id)
+          streamFlush ??= $.clock.after(300, () => void flushStreams($).catch(() => {}))
+        }
+        yield chunk
+      }
+    } finally {
+      // The step is in, or was cut off: its lines are final and no longer live.
+      for (const id of mine) {
+        const line = streaming.get(id)
+        if (line) streaming.set(id, { ...line, item: { ...line.item, live: false } })
+        dirty.add(id)
+      }
+      await flushStreams($).catch(() => {})
+      for (const id of mine) streaming.delete(id)
+    }
+    const result = await stream.result
     const usage = result.usage
     if (usage) {
       await ensure($, e.agentId)

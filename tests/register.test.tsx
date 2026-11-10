@@ -19,7 +19,7 @@ const PANE = {
 const SURFACES = ['terminal', 'desktop', 'vscode', 'mobile'] as const
 
 // Everything beneath the plugin: each hook here stands for the engine.
-function engine(on: On, roster: AgentInfo[] = []) {
+function engine(on: On, roster: AgentInfo[] = [], said: { thinking?: string[]; text?: string[]; tool?: string } = {}) {
   const clock = mock.clock(on, { now: 1_000_000 })
   mock.env(on, { HOME: '/home/t' })
   const writes = new Map<string, string>()
@@ -36,11 +36,13 @@ function engine(on: On, roster: AgentInfo[] = []) {
   on('process.run', () => ({
     value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
   }))
-  on('tool.call', () => ({ result: {} }))
+  on('tool.call', () => ({ result: {}, text: said.tool ?? '' }))
   on('agent.spawn', (_, e) => ({ model: 'haiku', agentId: e.description }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   on('turn.step', async function* (_, e) {
+    for (const t of said.thinking ?? []) yield { kind: 'thinking' as const, index: 0, text: t }
+    for (const t of said.text ?? []) yield { kind: 'text' as const, index: 1, text: t }
     return {
       turnId: e.turnId,
       index: e.index,
@@ -190,4 +192,28 @@ test('/world publishes the browser view, and state.js follows the world', async 
   await clock.advance(300)
   expect(snapshot().agents.map((a: { id: string }) => a.id)).toEqual(['main', 'h1'])
   expect(snapshot().agents[1].type).toBe('tester')
+})
+
+test('state.js carries each agent\'s live activity: prompt, thinking, writing, tool and result', async ($, on) => {
+  const { clock, writes } = engine(on, [], {
+    thinking: ['The tests ', 'need a fixture.'],
+    text: ['Adding it now.'],
+    tool: '3 passed, 0 failed',
+  })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.command.run({ command: 'world', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  const dir = '/home/t/.claude/basivo-world/sess-1'
+  await $.agent.spawn(spawn('h1', 'tester'))
+  await $.turn.start({ text: 'write the missing tests', turnId: 'T1', agentId: 'h1' })
+  await step($, 'h1')
+  await $.tool.call({ tool: 'Bash', command: 'npm test', agentId: 'h1' })
+  await clock.advance(300)
+  const v = JSON.parse(String(writes.get(`${dir}/state.js`)).replace(/^window\.__BASIVO_WORLD__ = /, '').replace(/;\n$/, ''))
+  const feed = v.agents.find((a: { id: string }) => a.id === 'h1').feed
+  expect(feed.map((f: { kind: string }) => f.kind)).toEqual(['prompt', 'thinking', 'text', 'tool'])
+  expect(feed[0].text).toBe('write the missing tests')
+  // The streamed pieces are joined, and the finished step is no longer live.
+  expect(feed[1]).toMatchObject({ text: 'The tests need a fixture.', live: false })
+  expect(feed[2]).toMatchObject({ text: 'Adding it now.', live: false })
+  expect(feed[3]).toMatchObject({ tool: 'Bash', text: 'npm test', result: '3 passed, 0 failed', isError: false, live: false })
 })

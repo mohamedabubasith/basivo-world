@@ -141,3 +141,24 @@ test('a tool call says what it works on, and the last few are remembered', async
   w = W.toolEnd(w, 'p1', 30)
   expect(W.view(w, 31).agents.find(a => a.id === 'p1')?.what).toBe(null)
 })
+
+test('the live feed keeps lines in order, updates one in place, and closes when done', async () => {
+  let w = crew()
+  const line = (id: string, kind: W.FeedItem['kind'], text: string, live = true): W.FeedItem => ({ id, kind, text, at: 0, live })
+  w = W.feedPut(w, 'p1', line('p', 'prompt', 'ping the host', false), 7)
+  w = W.feedPut(w, 'p1', line('s1', 'thinking', 'I should'), 8)
+  w = W.feedPut(w, 'p1', line('s1', 'thinking', 'I should run ping'), 9)
+  w = W.feedPut(w, 'p1', { ...line('t1', 'tool', 'ping -c1 host'), tool: 'Bash' }, 10)
+  let feed = W.view(w, 11).agents.find(a => a.id === 'p1')?.feed ?? []
+  expect(feed.map(f => f.id)).toEqual(['p', 's1', 't1'])
+  expect(feed[1]).toEqual({ id: 's1', kind: 'thinking', text: 'I should run ping', at: 8, live: true })
+  for (let i = 0; i < W.FEED + 5; i += 1) w = W.feedPut(w, 'p1', line(`x${i}`, 'text', 'hi'), 20 + i)
+  expect(W.view(w, 60).agents.find(a => a.id === 'p1')?.feed.length).toBe(W.FEED)
+  w = W.complete(w, 'p1', 'answer', 70)
+  feed = W.view(w, 71).agents.find(a => a.id === 'p1')?.feed ?? []
+  expect(feed.length).toBe(W.FEED_DONE)
+  expect(feed.some(f => f.live)).toBe(false)
+  // Long text keeps its newest words; secrets never reach the file.
+  expect(W.tail('a'.repeat(50) + 'END', 10)).toBe('…aaaaaaEND')
+  expect(W.head('export TOKEN=abc123 && run', 100)).not.toContain('abc123')
+})

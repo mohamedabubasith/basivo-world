@@ -17,6 +17,20 @@ export type Step = {
   at: number
 }
 
+// One line of an agent's live activity, as Claude Code shows it: the prompt it was
+// given, its thinking and its writing as they stream, and each tool call with its result.
+export type FeedItem = {
+  id: string
+  kind: 'prompt' | 'thinking' | 'text' | 'tool'
+  text: string
+  tool?: string
+  result?: string
+  isError?: boolean
+  at: number
+  // Still streaming, or the tool still running.
+  live: boolean
+}
+
 export type Agent = {
   id: string
   // null only for the main loop. A parent we never saw spawn keeps its id; the view
@@ -31,6 +45,8 @@ export type Agent = {
   what: string | null
   // The last few tool calls, oldest first.
   recent: Step[]
+  // The live activity, oldest first, capped (FEED in hooks/world.ts).
+  feed: FeedItem[]
   toolCalls: number
   tokens: Tokens
   model: string | null
