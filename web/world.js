@@ -1309,9 +1309,25 @@
     const parts = [head, pill, sect('Now', nowBox)]
     if (data.task) parts.push(sect('Task', h('p', 'p-task', data.task)))
     // The live activity: filled by renderFeed, line by line, so it never jumps.
-    const feedBox = h('div', 'p-feed')
-    feedBox.setAttribute('role', 'log')
-    feedBox.setAttribute('aria-live', 'off')
+    // The feed box outlives a rebuild of the panel around it, lines, scroll and all, so
+    // the agent changing tool never throws the reader back to the top. A new agent gets
+    // a fresh box.
+    let feedBox = panelBody.querySelector('.p-feed')
+    if (!feedBox || feedBox._agent !== pinned) {
+      feedBox = h('div', 'p-feed')
+      feedBox.setAttribute('role', 'log')
+      feedBox.setAttribute('aria-live', 'off')
+      feedBox.tabIndex = 0
+      feedBox._agent = pinned
+      feedBox._stick = true
+      // Following the newest line is the reader's call: scrolling up stops it, scrolling
+      // back to the bottom starts it again.
+      feedBox.addEventListener('scroll', () => {
+        if (Math.abs(feedBox.scrollTop - (feedBox._autoTop ?? -9)) < 2) return
+        feedBox._stick = feedBox.scrollHeight - feedBox.scrollTop - feedBox.clientHeight < 24
+      })
+    }
+    const feedScroll = feedBox.scrollTop
     parts.push(sect('Live activity', feedBox))
     const team = h('div', 'p-team')
     if (data.parent) team.append(h('div', 'p-k', 'Reports to'), person(data.parent))
@@ -1322,7 +1338,11 @@
       grid.append(h('dt', '', k), h('dd', '', v))
     }
     parts.push(sect('Cost', grid))
+    // Moving an element in the page loses its scroll position: both are put back.
+    const panelScroll = panel.scrollTop
     panelBody.replaceChildren(...parts)
+    panel.scrollTop = panelScroll
+    setScroll(feedBox, feedBox._stick ? feedBox.scrollHeight : feedScroll)
   }
 
   // An agent's activity, as Claude Code shows it. A state file from before the feed
@@ -1337,7 +1357,9 @@
   // scrolled up to read an older one.
   function renderFeed(box, items) {
     const nodes = (box._nodes ??= new Map())
-    const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 40
+    // Sitting at the very bottom means following, whichever event said so first.
+    if (box.scrollHeight - box.scrollTop - box.clientHeight < 2) box._stick = true
+    const tall = box.scrollHeight
     const keep = new Set()
     items.forEach((it, i) => {
       keep.add(it.id)
@@ -1360,7 +1382,16 @@
     }
     if (!items.length && !box.firstChild) box.append(h('p', 'p-none', 'Nothing yet.'))
     else if (items.length) box.querySelector(':scope > .p-none')?.remove()
-    if (stick) box.scrollTop = box.scrollHeight
+    // Down to the newest line only when there is something new, and only if following.
+    if (box._stick && box.scrollHeight !== tall) setScroll(box, box.scrollHeight)
+  }
+
+  // A scroll the page makes itself. Its position is remembered, so the scroll event it
+  // raises is not taken for the reader scrolling.
+  function setScroll(box, top) {
+    if (Math.abs(box.scrollTop - top) < 1) return
+    box.scrollTop = top
+    box._autoTop = box.scrollTop
   }
 
   // One line, in Claude Code's own marks: > the prompt, ✻ a thought, ⏺ a tool call or

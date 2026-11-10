@@ -77,6 +77,23 @@ async function at(page, ms) {
   check(/^>\s*write the missing tests/.test(feed), `the feed starts with the prompt it was given: ${JSON.stringify(feed.slice(0, 60))}`)
   check(/✻\s*(Thinking…|Thought)/.test(feed) && /Let me read|Run npm test|The change belongs/.test(feed), 'the feed shows its thinking, word for word')
   check(/⏺\s*Bash\(npm test -- orders\)/.test(feed) && /⎿\s*✓ orders.test.ts/.test(feed), 'the feed shows each tool call and its result, as Claude Code does')
+  // Scrolling the feed while the agent works: it stays where the reader put it, and
+  // follows the newest line again once scrolled back to the bottom.
+  const feedEl = page.locator('#panel .p-feed')
+  // Scrolled as a reader does: the same scroll event a wheel or a drag raises.
+  await feedEl.evaluate(b => { b.scrollTop -= 120 })
+  await page.clock.runFor(100)
+  const up = await feedEl.evaluate(b => b.scrollTop)
+  const tops = []
+  for (let i = 0; i < 6; i += 1) {
+    await page.clock.runFor(200)
+    tops.push(await feedEl.evaluate(b => b.scrollTop))
+  }
+  check(tops.every(t => Math.abs(t - up) < 2), `scrolled up, the feed holds still while the agent works (${up} → ${tops.join(',')})`)
+  await feedEl.evaluate(b => { b.scrollTop = b.scrollHeight })
+  await page.clock.runFor(600)
+  const bottomGap = await feedEl.evaluate(b => b.scrollHeight - b.scrollTop - b.clientHeight)
+  check(bottomGap < 2, `back at the bottom, the feed follows the newest line (${bottomGap}px from the end)`)
   // It streams: a moment later the thought or the tool has moved on, in place.
   const before = feed
   await page.clock.runFor(400)
